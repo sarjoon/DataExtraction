@@ -1,0 +1,9 @@
+-- ORACLE MAPPING QUERY PLACEHOLDER: replace these comments with your SELECT.
+-- While empty, generation uses the existing ALL_TAB_COLUMNS metadata query.
+-- Bind parameters in this order: 1 = schema/owner, 2 = table name.
+-- Return one row per column, ordered by source position, with these aliases:
+-- COLUMN_ID, COLUMN_NAME, DATA_TYPE, DATA_LENGTH, CHAR_LENGTH,
+-- DATA_PRECISION, DATA_SCALE, IS_NULLABLE ('YES'/'NO' or 'Y'/'N'),
+-- FIELD_DESCRIPTION, DEFAULT_VALUE, PK_FLAG ('PK' or NULL), FK_FLAG ('FK' or NULL).
+-- For unavailable fields return SQL NULL, not the string 'NULL'.
+-- Override the packaged query using edac.oracle.mapping-query=file:/absolute/path/query.sql.

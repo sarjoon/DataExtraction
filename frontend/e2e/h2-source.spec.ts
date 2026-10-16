@@ -1,0 +1,46 @@
+import { test, expect } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { unlinkSync } from 'node:fs';
+test('H2 source works through connection, discovery and persistent column selection',async({page})=>{
+ const database='BROWSER_'+Date.now();const backend=resolve('../backend');
+ try {
+  await page.goto('/connections');
+  await expect(page.getByText('Configuration DB ready',{exact:true})).toBeVisible();
+  await page.getByRole('combobox',{name:'Database type',exact:true}).selectOption('H2');
+  await expect(page.getByLabel('Host',{exact:true})).toHaveCount(0);
+  await page.getByLabel('Connection name',{exact:true}).fill(database);
+  await page.getByLabel('Database name',{exact:true}).fill(database);
+  await expect(page.getByLabel('Username',{exact:true})).toHaveValue('sa');
+  await expect(page.getByLabel('Schema / owner',{exact:true})).toHaveValue('PUBLIC');
+  const response=page.waitForResponse(r=>r.url().endsWith('/api/connections')&&r.request().method()==='POST');
+  await page.getByRole('button',{name:'Save connection',exact:true}).click();
+  const profile=await (await response).json();expect(profile.databaseType).toBe('H2');
+  await page.getByRole('button',{name:'Test connection',exact:true}).click();
+  await expect(page.getByText('Connected to H2 using the saved source connection details.',{exact:true})).toBeVisible();
+  execFileSync(process.env['EDAC_JAVA']||'java',['-cp',process.env['EDAC_H2_JAR']||resolve(homedir(),'.m2/repository/com/h2database/h2/2.3.232/h2-2.3.232.jar'),'org.h2.tools.RunScript','-url',profile.jdbcUrl,'-user','sa','-password','','-script',resolve('../samples/h2-source.sql')],{cwd:backend,windowsHide:true});
+  await page.getByRole('link',{name:'Manage tables',exact:false}).click();
+  await page.getByRole('button',{name:'Discover & append',exact:true}).click();
+  await expect(page.getByRole('cell',{name:'CUSTOMER',exact:true})).toBeVisible();
+  await expect(page.getByRole('cell',{name:'ACCOUNT',exact:true})).toBeVisible();
+  await expect(page.getByRole('cell',{name:'CONNECTION_PROFILE',exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:'Mapping workbook',exact:false}).click();
+  await page.getByLabel('Select PUBLIC.CUSTOMER',{exact:true}).check();
+  await expect(page.getByLabel('Include CUSTOMER_NAME',{exact:true})).toBeChecked();
+  await page.getByLabel('Include CUSTOMER_NAME',{exact:true}).uncheck();
+  await expect(page.getByText('Column selection saved.',{exact:true})).toBeVisible();
+  await page.reload();await page.getByLabel('Select PUBLIC.CUSTOMER',{exact:true}).check();
+  await expect(page.getByLabel('Include CUSTOMER_NAME',{exact:true})).not.toBeChecked();
+  await page.getByLabel('Select all tables',{exact:true}).check();
+  const downloadPromise=page.waitForEvent('download');
+  const exportRequest=page.waitForRequest(r=>r.url().endsWith('/mapping-workbook')&&r.method()==='POST');
+  await page.getByRole('button',{name:'Generate mapping workbook',exact:true}).click();
+  expect((await exportRequest).postDataJSON().tableIds).toHaveLength(2);
+  const download=await downloadPromise;expect(download.suggestedFilename()).toBe('Extraction_Framework_Mapping.xlsx');
+  await download.saveAs('test-results/h2-mapping-download.xlsx');
+  expect(await download.failure()).toBeNull();
+  await expect(page.getByText('Mapping workbook downloaded. Only included columns were exported.',{exact:true})).toBeVisible();
+  await page.screenshot({path:'test-results/h2-mapping.png',fullPage:true});
+ }finally{try{unlinkSync(resolve(backend,'data/sources',database+'.mv.db'));}catch{}}
+});

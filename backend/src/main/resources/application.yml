@@ -1,0 +1,31 @@
+server:
+  address: 127.0.0.1
+  port: 8081
+  error:
+    include-message: never
+spring:
+  application:
+    name: edac
+  profiles:
+    default: local
+  datasource:
+    url: ${EDAC_DB_URL:jdbc:h2:file:./data/edac;DB_CLOSE_ON_EXIT=FALSE}
+    username: ${EDAC_DB_USERNAME:sa}
+    password: ${EDAC_DB_PASSWORD:}
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: true
+    clean-disabled: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+  h2:
+    console:
+      enabled: false
+edac:
+  allowed-origins: http://localhost:4300,http://127.0.0.1:4300
+  admin-password: ${EDAC_ADMIN_PASSWORD:}
+  credential-key: ${EDAC_CREDENTIAL_KEY:}
+  credential-key-file: ${EDAC_CREDENTIAL_KEY_FILE:./secrets/credential.key}

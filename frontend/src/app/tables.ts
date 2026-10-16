@@ -1,0 +1,26 @@
+import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
+import { Api, AppendResult } from './api';
+@Component({standalone:true,imports:[FormsModule,RouterLink],template:`
+<div class="page-heading"><div><div class="eyebrow">CONFIGURATION</div><h1>Table list</h1><p>Build an inventory by upload, discovery or manual entry. Existing tables are retained.</p></div><a class="button secondary" href="/sample-tables.csv" download>Download sample CSV ↓</a></div>
+<section class="panel toolbar"><label>Connection<select [ngModel]="api.selectedId()" (ngModelChange)="select($event)" [disabled]="api.busy()"><option [ngValue]="null">Select a connection</option>@for(c of api.connections();track c.id){<option [ngValue]="c.id">{{c.name}} · {{c.schema}}</option>}</select></label><span class="pill">{{api.tables().length}} TABLES</span><button class="button secondary" (click)="refresh()" [disabled]="!api.selectedId() || api.busy()">Refresh list</button></section>
+@if(api.selected()){
+<div class="three-column"><section class="panel"><span class="tool-icon">↑</span><h2>Upload a table list</h2><p>CSV, TXT or XLSX · maximum 5 MB.<br>Accepts the mapping workbook’s FIle Spec tab.</p><label class="file-label">Choose table list<input type="file" accept=".csv,.txt,.xlsx" (change)="choose($event)" [disabled]="api.busy()"></label><small class="filename">{{file?.name || 'No file selected'}}</small><button class="button" (click)="upload()" [disabled]="!file || api.busy()">Upload & append</button></section>
+<section class="panel"><span class="tool-icon">＋</span><h2>Append manually</h2><p>One table per line, or separate names with commas. Optional: SCHEMA.TABLE_NAME.</p><label>Table names<textarea [(ngModel)]="names" rows="3" placeholder="CUSTOMER&#10;ACCOUNT" [disabled]="api.busy()"></textarea></label><button class="button secondary" (click)="append()" [disabled]="!names.trim() || api.busy()">Append tables</button></section>
+<section class="panel"><span class="tool-icon">▤</span><h2>Discover from source database</h2><p>Use the connection saved in H2 to list accessible tables in the selected source database schema.</p><small class="filename">Uses the saved encrypted password. Table structures will use your field-extraction query once supplied.</small><button class="button secondary" (click)="discover()" [disabled]="api.busy()">Discover & append</button></section></div>
+<section class="panel table-panel"><div class="panel-title"><div><h2>Registered tables</h2><p>{{filtered().length}} of {{api.tables().length}} tables · {{api.selected()!.name}}</p></div><label class="search">Search tables<input aria-label="Search tables" placeholder="Search name, schema or source" [ngModel]="search()" (ngModelChange)="search.set($event)"></label></div><div class="table-scroll"><table><thead><tr><th scope="col">#</th><th scope="col">Table name</th><th scope="col">Schema</th><th scope="col">Added from</th><th scope="col">Metadata</th></tr></thead><tbody>@for(t of filtered();track t.id;let i=$index){<tr><td>{{i+1}}</td><td><strong>{{t.name}}</strong></td><td>{{t.schema}}</td><td><span class="source-tag">{{t.source}}</span></td><td><span class="muted">Awaiting field query</span></td></tr>}@empty{<tr><td colspan="5"><div class="empty"><span>▦</span><h3>{{search()?'No matching tables':'Your table list starts here'}}</h3><p>{{search()?'Try another search.':'Upload a list, append names or discover from H2.'}}</p></div></td></tr>}</tbody></table></div></section>
+<div class="note">Names use unquoted SQL identifiers and are normalised to uppercase. Uploads and manual entries register names; they do not create source database tables.</div>
+} @else {<section class="panel empty"><span>▤</span><h2>Select a database connection</h2><p>Create a connection profile before adding tables.</p><a class="button" routerLink="/connections">Manage connections →</a></section>}
+`})
+export class TablesComponent {
+ api=inject(Api);file:File|null=null;names='';search=signal('');
+ filtered=computed(()=>{const term=this.search().toLowerCase();return this.api.tables().filter(t=>`${t.name} ${t.schema} ${t.source}`.toLowerCase().includes(term));});
+ select(id:number|null){this.file=null;this.names='';void this.api.run(()=>this.api.select(id));}
+ refresh(){void this.api.run(()=>this.api.refresh());}
+ choose(event:Event){this.file=(event.target as HTMLInputElement).files?.[0]??null;}
+ async added(result:AppendResult){await this.api.refresh();this.api.result(result);}
+ upload(){void this.api.run(async()=>{if(!this.file)return;if(this.file.size>5*1024*1024)throw Error('Upload a file no larger than 5 MB.');const body=new FormData();body.append('file',this.file);await this.added(await this.api.post<AppendResult>(`/connections/${this.api.selectedId()}/tables/import`,body));});}
+ append(){void this.api.run(async()=>{const names=this.names.split(/[\r\n,]+/).map(x=>x.trim()).filter(Boolean);await this.added(await this.api.post<AppendResult>(`/connections/${this.api.selectedId()}/tables`,{names}));this.names='';});}
+ discover(){void this.api.run(async()=>{await this.added(await this.api.post<AppendResult>(`/connections/${this.api.selectedId()}/tables/discover`,{}));});}
+}

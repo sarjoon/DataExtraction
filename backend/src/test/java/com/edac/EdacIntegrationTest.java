@@ -1,0 +1,252 @@
+package com.edac;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import java.util.List;
+
+@SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT,properties={"spring.datasource.url=jdbc:h2:mem:edac_test;DB_CLOSE_DELAY=-1","spring.datasource.password="})
+@AutoConfigureMockMvc @ActiveProfiles("local")
+class EdacIntegrationTest {
+    @Autowired MockMvc mvc;
+    @Autowired ObjectMapper json;
+    @Autowired JdbcTemplate db;
+    @Autowired TestRestTemplate http;
+    @Autowired CredentialCipher cipher;
+    @Autowired MappingWorkbookService workbooks;
+    @Autowired RegistryService registry;
+    @MockitoBean OracleSource oracle;
+    Models.ConnectionInput input(String name, String password) {
+        return new Models.ConnectionInput(name,"ORACLE","oracle.example.com",1521,"SERVICE_NAME","ORCLPDB1","app_user","APP",password);
+    }
+    long connection() throws Exception {
+        var request=input("Test "+UUID.randomUUID(),"test-secret");
+        var response=mvc.perform(post("/api/connections").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+            .andExpect(status().isOk()).andReturn();
+        return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
+    }
+    @Test void usesH2ConfigurationAndSavedCredentialsForOracle() throws Exception {
+        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("4"));
+        long id=connection();
+        when(oracle.test(any(),eq("test-secret"))).thenReturn(new Models.TestResult(true,"Oracle test",List.of()));
+        when(oracle.discover(any(),eq("test-secret"))).thenReturn(List.of(new Models.TableName("APP","CUSTOMER"),new Models.TableName("APP","ACCOUNT")));
+        mvc.perform(post("/api/connections/"+id+"/test").with(csrf()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.connected").value(true));
+        mvc.perform(post("/api/connections/"+id+"/tables/discover").with(csrf()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.added").value(2));
+        verify(oracle).test(argThat(p->p.id()==id && p.databaseType().equals("ORACLE")),eq("test-secret"));
+        verify(oracle).discover(argThat(p->p.id()==id && p.schema().equals("APP")),eq("test-secret"));
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM table_registry WHERE connection_id=?",Integer.class,id)).isEqualTo(2);
+        String stored=db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id);
+        assertThat(stored).startsWith("v1:").doesNotContain("test-secret");
+        assertThat(cipher.decrypt(stored)).isEqualTo("test-secret");
+        var listing=mvc.perform(get("/api/connections")).andReturn().getResponse().getContentAsString();
+        assertThat(listing).doesNotContain("test-secret",stored,"password_ciphertext");
+    }
+    @Test void updatesConnectionAndRetainsOrReplacesEncryptedPassword() throws Exception {
+        long id=connection();
+        var original=db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id);
+        mvc.perform(post("/api/connections/"+id).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input("Updated "+UUID.randomUUID(),""))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.passwordSaved").value(true));
+        assertThat(db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id)).isEqualTo(original);
+        mvc.perform(post("/api/connections/"+id).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input("Replaced "+UUID.randomUUID(),"new-secret"))))
+            .andExpect(status().isOk());
+        assertThat(cipher.decrypt(db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id))).isEqualTo("new-secret");
+    }
+    @Test void hidesLegacyH2SourcesWithoutDeletingThem() throws Exception {
+        db.update("INSERT INTO connection_profile(name,jdbc_url,username,schema_name) VALUES('Legacy H2','jdbc:h2:mem:legacy','sa','PUBLIC')");
+        long id=db.queryForObject("SELECT id FROM connection_profile WHERE name='Legacy H2'",Long.class);
+        mvc.perform(get("/api/connections")).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Legacy H2"))));
+        mvc.perform(post("/api/connections/"+id+"/test").with(csrf())).andExpect(status().isNotFound());
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM connection_profile WHERE id=?",Integer.class,id)).isEqualTo(1);
+    }
+    @Test void appendDeduplicatesAndRejectsWholeInvalidBatch() throws Exception {
+        long id=connection();String path="/api/connections/"+id+"/tables";
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"names\":[\"customer\",\"CUSTOMER\",\"ACCOUNT\"]}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.added").value(2)).andExpect(jsonPath("$.skipped").value(1));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"names\":[\"VALID_NEW\",\"invalid;drop\"]}"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(path)).andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"names\":[null]}"))
+            .andExpect(status().isBadRequest());
+    }
+    @Test void csvAppendPreservesExistingAndSeparatesConnections() throws Exception {
+        long id=connection(),other=connection();
+        var file=new MockMultipartFile("file","tables.csv","text/csv","Table Name,Schema\nCUSTOMER,PUBLIC\nACCOUNT,PUBLIC\nCUSTOMER,PUBLIC".getBytes(StandardCharsets.UTF_8));
+        String path="/api/connections/"+id+"/tables/import";
+        mvc.perform(multipart(path).file(file).with(csrf())).andExpect(status().isOk()).andExpect(jsonPath("$.added").value(2));
+        mvc.perform(multipart(path).file(file).with(csrf())).andExpect(jsonPath("$.added").value(0)).andExpect(jsonPath("$.skipped").value(3));
+        mvc.perform(get("/api/connections/"+other+"/tables")).andExpect(jsonPath("$.length()").value(0));
+    }
+    @Test void readsMappingWorkbookFileSpecAndRejectsBadUploads() throws Exception {
+        long id=connection();byte[] bytes;
+        try(var workbook=new XSSFWorkbook();var output=new ByteArrayOutputStream()) {
+            var sheet=workbook.createSheet("FIle Spec");sheet.createRow(1).createCell(14).setCellValue("Applicable to ctry (Y/N)");
+            sheet.createRow(2).createCell(1).setCellValue("File Name");sheet.createRow(3).createCell(1).setCellValue("CUSTOMER");
+            workbook.write(output);bytes=output.toByteArray();
+        }
+        String path="/api/connections/"+id+"/tables/import";
+        mvc.perform(multipart(path).file(new MockMultipartFile("file","mapping.xlsx","application/octet-stream",bytes)).with(csrf()))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.added").value(1));
+        mvc.perform(multipart(path).file(new MockMultipartFile("file","bad.xlsx","application/octet-stream",new byte[]{1,2,3})).with(csrf()))
+            .andExpect(status().isBadRequest());
+        mvc.perform(multipart(path).file(new MockMultipartFile("file","bad.csv","text/csv","Table Name\nOK_NAME\nBAD-NAME".getBytes())).with(csrf()))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/connections/"+id+"/tables")).andExpect(jsonPath("$.length()").value(1));
+    }
+    @Test void csrfCorsAndConsolePolicy() throws Exception {
+        mvc.perform(post("/api/connections").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isForbidden());
+        mvc.perform(options("/api/connections").header("Origin","http://127.0.0.1:4300").header("Access-Control-Request-Method","POST"))
+            .andExpect(status().isOk()).andExpect(header().string("Access-Control-Allow-Origin","http://127.0.0.1:4300"));
+        mvc.perform(options("/api/connections").header("Origin","https://untrusted.example").header("Access-Control-Request-Method","POST"))
+            .andExpect(status().isForbidden());
+    }
+    @Test void rejectsInvalidHostAndMissingPassword() throws Exception {
+        var request=new Models.ConnectionInput("Unsafe","ORACLE","host;INIT=SQL",1521,"SERVICE_NAME","ORCL","app","APP","secret");
+        mvc.perform(post("/api/connections").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/connections").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input("Missing password",""))))
+            .andExpect(status().isBadRequest());
+    }
+    @Test void columnSelectionsPersistAndRemainScopedToConfiguredTable() throws Exception {
+        long id=connection(),other=connection();
+        db.update("INSERT INTO table_registry(connection_id,schema_name,table_name,source) VALUES(?,?,?,'MANUAL')",id,"APP","CUSTOMER");
+        db.update("INSERT INTO table_registry(connection_id,schema_name,table_name,source) VALUES(?,?,?,'MANUAL')",id,"OTHER","CUSTOMER");
+        long table=db.queryForObject("SELECT id FROM table_registry WHERE connection_id=? AND schema_name='APP'",Long.class,id);
+        long otherSchema=db.queryForObject("SELECT id FROM table_registry WHERE connection_id=? AND schema_name='OTHER'",Long.class,id);
+        when(oracle.columns(any(),eq("test-secret"),any())).thenReturn(List.of(
+            new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true),
+            new Models.ColumnDetail(2,"NAME","VARCHAR2",100,100,null,null,true,true)));
+        String path="/api/connections/"+id+"/tables/"+table+"/columns";
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath("$[1].included").value(true));
+        String exclude=json.writeValueAsString(new Models.ColumnSelection("NAME",false));
+        mvc.perform(post(path+"/selection").contentType(MediaType.APPLICATION_JSON).content(exclude)).andExpect(status().isForbidden());
+        for(int i=0;i<2;i++) mvc.perform(post(path+"/selection").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(exclude)).andExpect(status().isOk());
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM column_exclusion WHERE table_id=?",Integer.class,table)).isEqualTo(1);
+        mvc.perform(get(path)).andExpect(jsonPath("$[0].included").value(true)).andExpect(jsonPath("$[1].included").value(false));
+        mvc.perform(get("/api/connections/"+id+"/tables/"+otherSchema+"/columns")).andExpect(jsonPath("$[1].included").value(true));
+        mvc.perform(get("/api/connections/"+other+"/tables/"+table+"/columns")).andExpect(status().isNotFound());
+        mvc.perform(post("/api/connections/"+other+"/tables/"+table+"/columns/selection").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(exclude)).andExpect(status().isNotFound());
+        mvc.perform(post(path+"/selection").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"columnName\":\"NAME\"}")).andExpect(status().isBadRequest());
+        mvc.perform(post(path+"/selection").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new Models.ColumnSelection("NAME",true)))).andExpect(status().isOk());
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM column_exclusion WHERE table_id=?",Integer.class,table)).isZero();
+        mvc.perform(get(path)).andExpect(jsonPath("$[1].included").value(true));
+        verify(oracle,atLeastOnce()).columns(argThat(p->p.id()==id),eq("test-secret"),eq(new Models.TableName("APP","CUSTOMER")));
+    }
+    @Test void h2SourceSupportsRealDiscoveryColumnsAndExclusions() throws Exception {
+        String database="source_"+UUID.randomUUID().toString().replace("-","");
+        var input=new Models.ConnectionInput("H2 "+database,"H2",null,null,"MEMORY",database,"sa","PUBLIC","");
+        var response=mvc.perform(post("/api/connections").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.databaseType").value("H2")).andReturn();
+        long id=json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
+        String base="/api/connections/"+id;
+        mvc.perform(post(base+"/test").with(csrf())).andExpect(status().isOk()).andExpect(jsonPath("$.connected").value(true));
+        try(var source=java.sql.DriverManager.getConnection("jdbc:h2:mem:"+database,"sa","");var sql=source.createStatement()) {
+            sql.execute("CREATE TABLE CUSTOMER(ID BIGINT PRIMARY KEY, NAME VARCHAR(80), BALANCE DECIMAL(12,2))");
+            sql.execute("CREATE SCHEMA OTHER");sql.execute("CREATE TABLE OTHER.HIDDEN(ID INT)");
+            mvc.perform(post(base+"/tables/discover").with(csrf())).andExpect(status().isOk()).andExpect(jsonPath("$.added").value(1));
+            long table=db.queryForObject("SELECT id FROM table_registry WHERE connection_id=?",Long.class,id);
+            String columns=base+"/tables/"+table+"/columns";
+            mvc.perform(get(columns)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].name").value("ID")).andExpect(jsonPath("$[0].nullable").value(false))
+                .andExpect(jsonPath("$[1].characterLength").value(80)).andExpect(jsonPath("$[2].precision").value(12)).andExpect(jsonPath("$[2].scale").value(2));
+            mvc.perform(post(columns+"/selection").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new Models.ColumnSelection("NAME",false)))).andExpect(status().isOk());
+            mvc.perform(get(columns)).andExpect(jsonPath("$[1].included").value(false));
+            mvc.perform(post(base).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(input))).andExpect(status().isOk());
+            sql.execute("SHUTDOWN");
+        }
+        verifyNoInteractions(oracle);
+    }
+    @Test void workbookUsesTemplateSelectedTablesAndSavedExclusions() throws Exception {
+        String database="workbook_"+UUID.randomUUID().toString().replace("-","");
+        var profile=registry.save(new Models.ConnectionInput(database,"H2",null,null,"MEMORY",database,"sa","PUBLIC",""));
+        try(var source=java.sql.DriverManager.getConnection(profile.jdbcUrl(),"sa","");var sql=source.createStatement()) {
+            sql.execute("CREATE TABLE CUSTOMER(ID BIGINT PRIMARY KEY,NAME VARCHAR(80),BALANCE DECIMAL(15,2) DEFAULT 0,BUSINESS_DATE DATE,UPDATED_AT TIMESTAMP)");
+            sql.execute("CREATE TABLE ACCOUNT(ID BIGINT PRIMARY KEY,CUSTOMER_ID BIGINT REFERENCES CUSTOMER(ID))");
+            registry.append(profile.id(),List.of("CUSTOMER","ACCOUNT"),"MANUAL");
+            var tables=registry.tables(profile.id());long customer=tables.stream().filter(t->t.name().equals("CUSTOMER")).findFirst().orElseThrow().id();
+            long account=tables.stream().filter(t->t.name().equals("ACCOUNT")).findFirst().orElseThrow().id();
+            db.update("INSERT INTO column_exclusion(table_id,column_name) VALUES(?,?)",customer,"NAME");
+            byte[] bytes=workbooks.generate(profile.id(),List.of(customer,account));
+            try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes));var template=new XSSFWorkbook(new org.springframework.core.io.ClassPathResource("templates/EDAC_Mapping_Template.xlsx").getInputStream())) {
+                assertThat(wb.getNumberOfSheets()).isEqualTo(3);assertThat(wb.getSheetName(0)).isEqualTo("FIle Spec");
+                var spec=wb.getSheetAt(0);assertThat(spec.getMergedRegion(0).formatAsString()).isEqualTo("P2:AK2");
+                assertThat(spec.getRow(3).getCell(1).getStringCellValue()).isEqualTo("CUSTOMER");
+                assertThat(spec.getRow(3).getCell(3).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+                assertThat(spec.getRow(3).getCell(4).getStringCellValue()).isEqualTo("Daily");
+                assertThat(spec.getRow(3).getCell(8).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+                assertThat(spec.getRow(2).getCell(2).getStringCellValue()).isEqualTo("Link");
+                for(int r=3;r<=4;r++) {
+                    var link=spec.getRow(r).getCell(2);
+                    assertThat(link.getStringCellValue()).isEqualTo("Go to sheet");
+                    assertThat(link.getHyperlink().getType()).isEqualTo(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
+                    assertThat(link.getHyperlink().getAddress()).isEqualTo("'"+wb.getSheetName(r-2)+"'!A1");
+                    assertThat(spec.getRow(r).getCell(1).getHyperlink()).isNull();
+                }
+                for(int c=2;c<36;c++) {
+                    assertThat(spec.getColumnWidth(c+1)).isEqualTo(template.getSheetAt(0).getColumnWidth(c));
+                    assertThat(spec.getRow(2).getCell(c+1).getStringCellValue()).isEqualTo(template.getSheetAt(0).getRow(2).getCell(c).getStringCellValue());
+                }
+                assertThat(spec.getDataValidations().get(0).getRegions().getCellRangeAddresses()[0].formatAsString()).isEqualTo("P4:AK5");
+                var customerSheet=wb.getSheet("CUSTOMER");var accountSheet=wb.getSheet("ACCOUNT");
+                assertThat(customerSheet.getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");
+                assertThat(customerSheet.getRow(9).getCell(3).getNumericCellValue()).isEqualTo(19);
+                assertThat(customerSheet.getRow(9).getCell(5).getStringCellValue()).isEqualTo("PK");
+                assertThat(customerSheet.getRow(10).getCell(1).getStringCellValue()).isEqualTo("BALANCE");
+                assertThat(customerSheet.getRow(10).getCell(3).getNumericCellValue()).isEqualTo(15);
+                assertThat(customerSheet.getRow(10).getCell(4).getNumericCellValue()).isEqualTo(2);
+                assertThat(customerSheet.getRow(10).getCell(9).getStringCellValue()).isEqualTo("0");
+                assertThat(customerSheet.getRow(11).getCell(3).getNumericCellValue()).isEqualTo(8);
+                assertThat(customerSheet.getRow(12).getCell(3).getNumericCellValue()).isEqualTo(14);
+                assertThat(customerSheet.getRow(13).getCell(0).getStringCellValue()).isEqualTo("Trailer");
+                assertThat(accountSheet.getRow(10).getCell(5).getStringCellValue()).isEqualTo("FK");
+                var formatter=new org.apache.poi.ss.usermodel.DataFormatter();
+                for(int r=0;r<7;r++)for(int c=0;c<11;c++)assertThat(formatter.formatCellValue(customerSheet.getRow(r).getCell(c))).isEqualTo(formatter.formatCellValue(accountSheet.getRow(r).getCell(c)));
+                for(int r=0;r<5;r++)for(int c=0;c<11;c++)assertThat(formatter.formatCellValue(customerSheet.getRow(13+r).getCell(c))).isEqualTo(formatter.formatCellValue(accountSheet.getRow(11+r).getCell(c)));
+                assertThat(customerSheet.getRow(5).getCell(3).getNumericCellValue()).isEqualTo(8);
+                assertThat(customerSheet.getRow(6).getCell(3).getNumericCellValue()).isEqualTo(14);
+                assertThat(customerSheet.getColumnWidth(10)).isEqualTo(template.getSheetAt(1).getColumnWidth(10));
+                assertThat(customerSheet.getRow(8).getCell(0).getCellStyle().getFillForegroundXSSFColor().getARGBHex()).isEqualTo(template.getSheetAt(1).getRow(8).getCell(0).getCellStyle().getFillForegroundXSSFColor().getARGBHex());
+                for(var sheet:wb)for(var row:sheet)for(var cell:row)assertThat(formatter.formatCellValue(cell)).isNotEqualToIgnoringCase("NULL");
+            }
+            java.nio.file.Files.createDirectories(java.nio.file.Path.of("../outputs/workbook-verification"));
+            java.nio.file.Files.write(java.nio.file.Path.of("../outputs/workbook-verification/EDAC_Mapping_Workbook.xlsx"),bytes);
+            for(var column:List.of("ID","BALANCE","BUSINESS_DATE","UPDATED_AT"))db.update("INSERT INTO column_exclusion(table_id,column_name) VALUES(?,?)",customer,column);
+            try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbooks.generate(profile.id(),List.of(customer))))) {
+                assertThat(wb.getNumberOfSheets()).isEqualTo(2);assertThat(wb.getSheetAt(1).getRow(9).getCell(0).getStringCellValue()).isEqualTo("Trailer");
+            }
+            sql.execute("SHUTDOWN");
+        }
+    }
+    @Test void workbookDownloadValidatesSelectionAndSupportsOraclePlaceholder() throws Exception {
+        long id=connection(),other=connection();registry.append(id,List.of("CUSTOMER"),"MANUAL");long table=registry.tables(id).get(0).id();
+        when(oracle.mappingFields(any(),anyString(),any())).thenReturn(List.of(new Models.MappingField(new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true),null,null,null)));
+        String path="/api/connections/"+id+"/mapping-workbook";String body=json.writeValueAsString(new Models.WorkbookRequest(List.of(table)));
+        var response=mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andExpect(header().string("Content-Disposition","attachment; filename=Extraction_Framework_Mapping.xlsx")).andReturn();
+        try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(response.getResponse().getContentAsByteArray()))) {assertThat(wb.getSheet("CUSTOMER").getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");}
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"tableIds\":[]}")).andExpect(status().isBadRequest());
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new Models.WorkbookRequest(List.of(table,table))))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/connections/"+other+"/mapping-workbook").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
+    }
+}

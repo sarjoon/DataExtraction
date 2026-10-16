@@ -1,0 +1,120 @@
+package com.edac;
+
+import static com.edac.Models.*;
+import java.sql.*;
+import java.util.*;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+@Service
+public class RegistryService {
+    private final JdbcTemplate db;
+    private final CredentialCipher cipher;
+    private final OracleSource oracle;
+    private final H2Source h2;
+    public RegistryService(JdbcTemplate db, CredentialCipher cipher, OracleSource oracle, H2Source h2) {
+        this.db = db; this.cipher = cipher; this.oracle = oracle; this.h2 = h2;
+    }
+    public List<ConnectionProfile> connections() {
+        return db.query("SELECT * FROM connection_profile WHERE database_type='ORACLE' OR (database_type='H2' AND connection_type IN ('FILE','MEMORY','TCP')) ORDER BY id", (r,n) -> new ConnectionProfile(
+            r.getLong("id"),r.getString("name"),r.getString("database_type"),r.getString("host"),r.getObject("port")==null?9092:r.getInt("port"),
+            r.getString("connection_type"),r.getString("database_name"),r.getString("jdbc_url"),r.getString("username"),
+            r.getString("schema_name"),r.getString("password_ciphertext") != null));
+    }
+    public ConnectionProfile connection(long id) {
+        return connections().stream().filter(c -> c.id()==id).findFirst()
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"Connection not found."));
+    }
+    public ConnectionProfile save(ConnectionInput input) {
+        if ("ORACLE".equals(input.databaseType()) && (input.password() == null || input.password().isBlank())) throw new IllegalArgumentException("Password is required for a new Oracle connection.");
+        String url = sourceUrl(input);
+        String encrypted = cipher.encrypt(input.password()==null?"":input.password());
+        var keys=new GeneratedKeyHolder();
+        try {
+            db.update(c -> {
+                var p=c.prepareStatement("INSERT INTO connection_profile(name,jdbc_url,username,schema_name,database_type,host,port,connection_type,database_name,password_ciphertext) VALUES(?,?,?,?,?,?,?,?,?,?)",new String[]{"id"});
+                p.setString(1,input.name().trim());p.setString(2,url);p.setString(3,input.username().trim());p.setString(4,identifier(input.schema()));
+                p.setString(5,input.databaseType());p.setString(6,input.host());p.setObject(7,input.port());p.setString(8,input.connectionType());p.setString(9,input.databaseName());p.setString(10,encrypted);return p;
+            },keys);
+        } catch (DuplicateKeyException e) { throw new IllegalArgumentException("A connection with that name already exists."); }
+        return connection(Objects.requireNonNull(keys.getKey()).longValue());
+    }
+    public ConnectionProfile update(long id, ConnectionInput input) {
+        var existing=connection(id);
+        if(!existing.databaseType().equals(input.databaseType())) throw new IllegalArgumentException("Create a new profile to change database type.");
+        String url = sourceUrl(input);
+        String encrypted = input.password() == null || input.password().isBlank() ? storedPassword(id) : cipher.encrypt(input.password());
+        try {
+            db.update("UPDATE connection_profile SET name=?,jdbc_url=?,username=?,schema_name=?,host=?,port=?,connection_type=?,database_name=?,password_ciphertext=? WHERE id=?",
+                input.name().trim(),url,input.username().trim(),identifier(input.schema()),input.host(),input.port(),input.connectionType(),input.databaseName(),encrypted,id);
+        } catch (DuplicateKeyException e) {
+            throw new IllegalArgumentException("A connection with that name already exists.");
+        }
+        return connection(id);
+    }
+    private String storedPassword(long id) {
+        return db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id);
+    }
+    public TestResult test(long id) {
+        var profile = connection(id);
+        return "H2".equals(profile.databaseType())?h2.test(profile,cipher.decrypt(storedPassword(id))):oracle.test(profile,cipher.decrypt(storedPassword(id)));
+    }
+    public List<TableName> discover(long id) {
+        var profile = connection(id);
+        return "H2".equals(profile.databaseType())?h2.discover(profile,cipher.decrypt(storedPassword(id))):oracle.discover(profile,cipher.decrypt(storedPassword(id)));
+    }
+    public List<TableEntry> tables(long id) {
+        connection(id);
+        return db.query("SELECT * FROM table_registry WHERE connection_id=? ORDER BY schema_name,table_name",(r,n)->new TableEntry(
+            r.getLong("id"),r.getLong("connection_id"),r.getString("schema_name"),r.getString("table_name"),r.getString("source"),r.getString("created_at")),id);
+    }
+    public TableEntry table(long connectionId,long tableId) {
+        return tables(connectionId).stream().filter(t->t.id()==tableId).findFirst()
+            .orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"Configured table not found for this connection."));
+    }
+    public List<ColumnDetail> columns(long connectionId,long tableId) {
+        var table=table(connectionId,tableId);
+        var profile=connection(connectionId);
+        var name=new TableName(table.schema(),table.name());
+        var password=cipher.decrypt(storedPassword(connectionId));
+        return "H2".equals(profile.databaseType())?h2.columns(profile,password,name):oracle.columns(profile,password,name);
+    }
+    public List<MappingField> mappingFields(long connectionId,long tableId) {
+        var table=table(connectionId,tableId);var profile=connection(connectionId);
+        var name=new TableName(table.schema(),table.name());var password=cipher.decrypt(storedPassword(connectionId));
+        return "H2".equals(profile.databaseType())?h2.mappingFields(profile,password,name):oracle.mappingFields(profile,password,name);
+    }
+    @Transactional
+    public AppendResult append(long id,List<String> names,String source) {
+        var profile=connection(id);
+        if(names.isEmpty() || names.size()>10000) throw new IllegalArgumentException("Provide between 1 and 10,000 table names.");
+        // Validate the complete upload before any write, so a bad row never partially appends a file.
+        List<TableName> parsed=new ArrayList<>();
+        for(String name:names) {
+            String[] parts=name.trim().split("\\.",-1);
+            if(parts.length>2) throw new IllegalArgumentException("Use TABLE_NAME or SCHEMA.TABLE_NAME: "+name);
+            parsed.add(new TableName(parts.length==2?identifier(parts[0]):profile.schema(),identifier(parts[parts.length-1])));
+        }
+        int added=0;
+        for(var table:parsed) {
+            try { db.update("INSERT INTO table_registry(connection_id,schema_name,table_name,source) VALUES(?,?,?,?)",id,table.schema(),table.name(),source);added++; }
+            catch(DuplicateKeyException duplicate) { /* Existing rows are retained unchanged. */ }
+        }
+        return new AppendResult(added,names.size()-added,tables(id).size());
+    }
+    private static String sourceUrl(ConnectionInput input) {
+        if("H2".equals(input.databaseType()))return H2Source.url(input.host(),input.port(),input.connectionType(),input.databaseName());
+        if(input.port()==null)throw new IllegalArgumentException("Oracle port is required.");
+        return OracleConnectionFactory.url(input.host(),input.port(),input.connectionType(),input.databaseName());
+    }
+    static String identifier(String value) {
+        if(value==null || !value.trim().matches("[A-Za-z_][A-Za-z0-9_$#]{0,127}"))
+            throw new IllegalArgumentException("Names must start with a letter or underscore and contain only letters, digits, underscores, $ or # (128 characters maximum).");
+        return value.trim().toUpperCase(Locale.ROOT);
+    }
+}

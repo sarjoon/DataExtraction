@@ -1,0 +1,14 @@
+**/node_modules/
+**/target/
+**/dist/
+**/.angular/
+**/data/
+**/test-results/
+**/playwright-report/
+*.log
+.env
+**/secrets/
+outputs/
+%SystemDrive%/
+samples/
+
