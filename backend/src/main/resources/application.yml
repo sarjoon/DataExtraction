@@ -4,6 +4,9 @@ server:
   error:
     include-message: never
 spring:
+  cloud:
+    config:
+      enabled: false
   application:
     name: edac
   profiles:
