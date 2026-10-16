@@ -237,6 +237,39 @@ class EdacIntegrationTest {
             sql.execute("SHUTDOWN");
         }
     }
+    @Test void workbookSkipsMissingSourceTablesAndReportsAllMissing() throws Exception {
+        String database="missing_"+UUID.randomUUID().toString().replace("-","");
+        var profile=registry.save(new Models.ConnectionInput(database,"H2",null,null,"MEMORY",database,"sa","PUBLIC",""));
+        try(var source=java.sql.DriverManager.getConnection(profile.jdbcUrl(),"sa","");var sql=source.createStatement()) {
+            sql.execute("CREATE TABLE PRESENT_TABLE(ID INTEGER)");
+            registry.append(profile.id(),List.of("MISSING_TABLE","PRESENT_TABLE"),"MANUAL");
+            var tables=registry.tables(profile.id());
+            long missing=tables.stream().filter(t->t.name().equals("MISSING_TABLE")).findFirst().orElseThrow().id();
+            long present=tables.stream().filter(t->t.name().equals("PRESENT_TABLE")).findFirst().orElseThrow().id();
+            try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbooks.generate(profile.id(),List.of(missing,present))))) {
+                assertThat(wb.getNumberOfSheets()).isEqualTo(3);
+                assertThat(wb.getSheet("MISSING_TABLE")).isNull();
+                assertThat(wb.getSheet("PRESENT_TABLE").getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");
+                assertThat(wb.getSheetAt(0).getRow(3).getCell(2).getHyperlink().getAddress()).isEqualTo("'PRESENT_TABLE'!A1");
+                var report=wb.getSheet("Generation Report");
+                assertThat(report.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Selected: 2 | Generated: 1 | Skipped: 1");
+                assertThat(report.getRow(3).getCell(1).getStringCellValue()).isEqualTo("MISSING_TABLE");
+                java.nio.file.Files.createDirectories(java.nio.file.Path.of("../outputs/workbook-verification"));
+                java.nio.file.Files.write(java.nio.file.Path.of("../outputs/workbook-verification/missing-tables.xlsx"),workbooks.generate(profile.id(),List.of(missing,present)));
+            }
+            try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbooks.generate(profile.id(),List.of(missing))))) {
+                assertThat(wb.getNumberOfSheets()).isEqualTo(2);
+                assertThat((Object)wb.getSheetAt(0).getRow(3)).isNull();
+                assertThat(wb.getSheet("Generation Report").getRow(0).getCell(0).getStringCellValue()).contains("Generated: 0");
+            }
+            sql.execute("SHUTDOWN");
+        }
+    }
+    @Test void workbookDoesNotSkipConnectionOrQueryFailures() throws Exception {
+        long id=connection();registry.append(id,List.of("CUSTOMER"),"MANUAL");long table=registry.tables(id).get(0).id();
+        when(oracle.mappingFields(any(),anyString(),any())).thenThrow(new IllegalArgumentException("Oracle connection or query failed"));
+        assertThatThrownBy(()->workbooks.generate(id,List.of(table))).hasMessage("Oracle connection or query failed");
+    }
     @Test void workbookPreservesCustomSourceMetadataAndExplicitNulls() throws Exception {
         long id=connection();registry.append(id,List.of("CUSTOMER"),"MANUAL");long table=registry.tables(id).get(0).id();
         var column=new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true);

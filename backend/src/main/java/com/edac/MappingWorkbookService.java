@@ -20,11 +20,14 @@ public class MappingWorkbookService {
         if(new HashSet<>(ids).size()!=ids.size())throw new IllegalArgumentException("Select each table only once.");
         var profile=registry.connection(connectionId);
         var tables=ids.stream().map(id->registry.table(connectionId,id)).toList();
-        // Resolve all metadata before creating the download; never silently omit failed tables.
+        // Skip unavailable source tables and disclose each omission in the workbook.
+        var skipped=new LinkedHashMap<TableEntry,String>();
         var fields=new LinkedHashMap<Long,List<MappingField>>();int count=0;
         for(var table:tables) {
             var excluded=new HashSet<>(db.queryForList("SELECT column_name FROM column_exclusion WHERE table_id=?",String.class,table.id()));
-            var included=registry.mappingFields(connectionId,table.id()).stream().filter(f->!excluded.contains(f.column().name())).toList();
+            List<MappingField> included;
+            try {included=registry.mappingFields(connectionId,table.id()).stream().filter(f->!excluded.contains(f.column().name())).toList();}
+            catch(SourceTableUnavailableException e) {skipped.put(table,e.getMessage());continue;}
             count+=included.size();if(count>50000)throw new IllegalArgumentException("Select fewer tables: the workbook limit is 50,000 included columns.");
             fields.put(table.id(),included);
         }
@@ -42,11 +45,13 @@ public class MappingWorkbookService {
             if(spec.getCTWorksheet().isSetDataValidations())spec.getCTWorksheet().unsetDataValidations();
             // Keep the reference sheets until every row/style has been copied.
             int originalCount=wb.getNumberOfSheets();Set<String> used=new HashSet<>();used.add("file spec");
+            if(!skipped.isEmpty())used.add("generation report");
             var reserved=new HashSet<String>();
             for(var table:tables){reserved.add(WorkbookUtil.createSafeSheetName(table.name()).toLowerCase(Locale.ROOT));reserved.add(WorkbookUtil.createSafeSheetName(table.schema()+"."+table.name()).toLowerCase(Locale.ROOT));}
             for(int i=1;i<originalCount;i++){String reference="__template_"+i;while(reserved.contains(reference.toLowerCase(Locale.ROOT))||wb.getSheet(reference)!=null)reference+="_";wb.setSheetName(i,reference);}
             int serial=0;
             for(var table:tables) {
+                if(!fields.containsKey(table.id()))continue;
                 String label=tables.stream().filter(t->t.name().equalsIgnoreCase(table.name())).count()>1?table.schema()+"."+table.name():table.name();
                 String name=uniqueName(label,used);
                 var sheet=wb.cloneSheet(wb.getSheetIndex(prototype));
@@ -74,8 +79,23 @@ public class MappingWorkbookService {
                 link.setAddress("'"+name.replace("'","''")+"'!A1");row.getCell(1).setHyperlink(link);
             }
             addNavigationColumn(wb,spec);
-            validation(spec,3,2+tables.size(),15,36,new String[]{"Y","N"});
+            if(serial>0)validation(spec,3,2+serial,15,36,new String[]{"Y","N"});
             for(int i=originalCount-1;i>=1;i--)wb.removeSheetAt(i);
+            if(!skipped.isEmpty()) {
+                var report=wb.createSheet("Generation Report");
+                var summary=report.createRow(0);summary.createCell(0).setCellValue("Selected: "+tables.size()+" | Generated: "+serial+" | Skipped: "+skipped.size());
+                report.addMergedRegion(new CellRangeAddress(0,0,0,3));
+                String[] headers={"Schema","Table Name","Status","Reason"};var heading=report.createRow(2);
+                for(int c=0;c<headers.length;c++){var cell=heading.createCell(c);cell.setCellValue(headers[c]);cell.setCellStyle(spec.getRow(2).getCell(1).getCellStyle());}
+                int r=3;
+                for(var entry:skipped.entrySet()) {
+                    var row=report.createRow(r++);row.setHeightInPoints(42);
+                    Object[] values={entry.getKey().schema(),entry.getKey().name(),"Skipped",entry.getValue()};
+                    for(int c=0;c<values.length;c++){var cell=row.createCell(c);cell.setCellStyle(specStyles[2]);put(cell,values[c]);}
+                }
+                report.setColumnWidth(0,24*256);report.setColumnWidth(1,40*256);report.setColumnWidth(2,16*256);report.setColumnWidth(3,80*256);
+                report.createFreezePane(0,3);
+            }
             wb.setActiveSheet(0);spec.setSelected(true);
             wb.getCreationHelper().createFormulaEvaluator().evaluateAll();
             wb.write(output);return output.toByteArray();
@@ -90,6 +110,7 @@ public class MappingWorkbookService {
         spec.setColumnWidth(2,16*256);
         var header=spec.getRow(2).createCell(2);
         header.setCellValue("Link");header.setCellStyle(spec.getRow(2).getCell(1).getCellStyle());
+        if(spec.getLastRowNum()<3)return;
         var style=wb.createCellStyle();style.cloneStyleFrom(spec.getRow(3).getCell(1).getCellStyle());
         var font=wb.createFont();var original=wb.getFontAt(style.getFontIndex());
         font.setFontName(original.getFontName());font.setFontHeight(original.getFontHeight());

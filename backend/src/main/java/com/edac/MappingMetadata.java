@@ -36,7 +36,7 @@ final class MappingMetadata {
                 if(labels.contains("SOURCE_LENGTH"))sourceMetadata.put("SOURCE_LENGTH",(Number)rows.getObject("SOURCE_LENGTH"));
                 result.add(new MappingField(column,String.join(",",keys),rows.getString("FIELD_DESCRIPTION"),rows.getString("DEFAULT_VALUE"),nullable==null?null:column.nullable()?"O":"M",sourceMetadata));
             }}
-            if(result.isEmpty())throw new IllegalArgumentException("No accessible columns for "+table.schema()+"."+table.name()+" in the selected source database.");
+            if(result.isEmpty())throw new SourceTableUnavailableException("Table missing, inaccessible, or metadata query returned no columns.");
             if(result.size()>5000)throw new IllegalArgumentException("Table exceeds the supported limit of 5,000 columns.");
             return result;
         }

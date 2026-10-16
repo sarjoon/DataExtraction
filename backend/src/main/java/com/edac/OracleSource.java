@@ -55,7 +55,7 @@ public class OracleSource {
                     nullableInt(rows.getObject("DATA_PRECISION")),nullableInt(rows.getObject("DATA_SCALE")),
                     "Y".equals(rows.getString("NULLABLE")),true));
             }
-            if(result.isEmpty()) throw new IllegalArgumentException("Table not found or no accessible columns in the selected Oracle connection.");
+            if(result.isEmpty()) throw new SourceTableUnavailableException("Table not found or no accessible columns in the selected Oracle connection.");
             if(result.size()>5000) throw new IllegalArgumentException("Table exceeds the supported limit of 5,000 columns.");
             return result;
         } catch (SQLException e) { throw failure(e); }
