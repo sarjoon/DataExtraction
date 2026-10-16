@@ -119,7 +119,9 @@ public class MappingWorkbookService {
         else if(source.contains("CHAR") || Set.of("CLOB","NCLOB","VARCHAR2","NVARCHAR2").contains(source)) {type="A";length=c.characterLength();}
         else if(source.equals("BOOLEAN")){type="A";length=5;}
         else if(sourceLength==null)sourceLength=c.byteLength();
-        return new Object[]{serial,c.name(),type,length,decimal,field.key(),field.mandatory(),field.description(),date,field.defaultValue(),null,null,c.dataType(),sourceLength,c.scale()};
+        return new Object[]{serial,c.name(),type,length,decimal,field.key(),field.mandatory(),field.description(),date,field.defaultValue(),null,null,
+            field.sourceMetadata().getOrDefault("SOURCE_DATA_TYPE",c.dataType()),
+            field.sourceMetadata().getOrDefault("SOURCE_LENGTH",sourceLength),c.scale()};
     }
     private static int findTrailer(XSSFSheet sheet){for(var row:sheet)if("Trailer".equals(new DataFormatter().formatCellValue(row.getCell(0))))return row.getRowNum();throw new IllegalStateException("Template Trailer section is missing.");}
     private static String uniqueName(String value,Set<String> used) {

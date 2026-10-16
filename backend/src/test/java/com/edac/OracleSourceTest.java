@@ -60,6 +60,10 @@ class OracleSourceTest {
         var factory=mock(OracleConnectionFactory.class);var connection=mock(Connection.class);
         var statement=mock(PreparedStatement.class);var rows=mock(ResultSet.class);
         String query="SELECT * FROM CUSTOM_METADATA WHERE OWNER = ? AND TABLE_NAME = ?";
+        var metadata=mock(ResultSetMetaData.class);when(rows.getMetaData()).thenReturn(metadata);
+        when(metadata.getColumnCount()).thenReturn(2);
+        when(metadata.getColumnLabel(1)).thenReturn("SOURCE_DATA_TYPE");when(metadata.getColumnLabel(2)).thenReturn("SOURCE_LENGTH");
+        when(rows.getString("SOURCE_DATA_TYPE")).thenReturn("CUSTOM_TEXT");when(rows.getObject("SOURCE_LENGTH")).thenReturn(75);
         when(factory.open(profile(),"secret")).thenReturn(connection);
         when(connection.prepareStatement(query)).thenReturn(statement);
         when(statement.executeQuery()).thenReturn(rows);when(rows.next()).thenReturn(true,false);
@@ -75,6 +79,7 @@ class OracleSourceTest {
         assertThat(result.get(0).column()).isEqualTo(new Models.ColumnDetail(1,"NAME","VARCHAR2",400,100,null,null,true,true));
         assertThat(result.get(0).description()).isEqualTo("Customer name");
         assertThat(result.get(0).mandatory()).isEqualTo("O");
+        assertThat(result.get(0).sourceMetadata()).containsEntry("SOURCE_DATA_TYPE","CUSTOM_TEXT").containsEntry("SOURCE_LENGTH",75);
         verify(connection).prepareStatement(query);
         verify(statement).setString(1,"SALES");verify(statement).setString(2,"CUSTOMER");
         verify(rows).close();verify(statement).close();verify(connection).close();

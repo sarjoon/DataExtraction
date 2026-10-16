@@ -237,6 +237,26 @@ class EdacIntegrationTest {
             sql.execute("SHUTDOWN");
         }
     }
+    @Test void workbookPreservesCustomSourceMetadataAndExplicitNulls() throws Exception {
+        long id=connection();registry.append(id,List.of("CUSTOMER"),"MANUAL");long table=registry.tables(id).get(0).id();
+        var column=new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true);
+        var blanks=new java.util.HashMap<String,Object>();blanks.put("SOURCE_DATA_TYPE",null);blanks.put("SOURCE_LENGTH",null);
+        when(oracle.mappingFields(any(),anyString(),any())).thenReturn(List.of(
+            new Models.MappingField(column,null,null,null,"M",java.util.Map.of("SOURCE_DATA_TYPE","CUSTOM_NUMBER","SOURCE_LENGTH",28)),
+            new Models.MappingField(column,null,null,null,"M",blanks),
+            new Models.MappingField(column,null,null,null)));
+        try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbooks.generate(id,List.of(table))))) {
+            var sheet=wb.getSheet("CUSTOMER");
+            assertThat(sheet.getRow(9).getCell(12).getStringCellValue()).isEqualTo("CUSTOM_NUMBER");
+            assertThat(sheet.getRow(9).getCell(13).getNumericCellValue()).isEqualTo(28);
+            assertThat(sheet.getRow(9).getCell(2).getStringCellValue()).isEqualTo("N");
+            assertThat(sheet.getRow(9).getCell(3).getNumericCellValue()).isEqualTo(10);
+            assertThat(sheet.getRow(10).getCell(12).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+            assertThat(sheet.getRow(10).getCell(13).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+            assertThat(sheet.getRow(11).getCell(12).getStringCellValue()).isEqualTo("NUMBER");
+            assertThat(sheet.getRow(11).getCell(13).getNumericCellValue()).isEqualTo(10);
+        }
+    }
     @Test void workbookDownloadValidatesSelectionAndSupportsOraclePlaceholder() throws Exception {
         long id=connection(),other=connection();registry.append(id,List.of("CUSTOMER"),"MANUAL");long table=registry.tables(id).get(0).id();
         when(oracle.mappingFields(any(),anyString(),any())).thenReturn(List.of(new Models.MappingField(new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true),null,null,null)));

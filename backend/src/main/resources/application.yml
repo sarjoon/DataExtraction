@@ -28,6 +28,8 @@ spring:
     console:
       enabled: false
 edac:
+  oracle:
+    mapping-query: classpath:sql/oracle-mapping.sql
   allowed-origins: http://localhost:4300,http://127.0.0.1:4300
   admin-password: ${EDAC_ADMIN_PASSWORD:}
   credential-key: ${EDAC_CREDENTIAL_KEY:}

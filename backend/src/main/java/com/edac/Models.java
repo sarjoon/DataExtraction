@@ -25,7 +25,8 @@ public final class Models {
         Integer precision, Integer scale, boolean nullable, boolean included) {
         public ColumnDetail withIncluded(boolean value) { return new ColumnDetail(position,name,dataType,byteLength,characterLength,precision,scale,nullable,value); }
     }
-    public record MappingField(ColumnDetail column,String key,String description,String defaultValue,String mandatory) {
+    public record MappingField(ColumnDetail column,String key,String description,String defaultValue,String mandatory,java.util.Map<String,Object> sourceMetadata) {
+        public MappingField(ColumnDetail column,String key,String description,String defaultValue,String mandatory){this(column,key,description,defaultValue,mandatory,java.util.Collections.emptyMap());}
         public MappingField(ColumnDetail column,String key,String description,String defaultValue){this(column,key,description,defaultValue,column.nullable()?"O":"M");}
     }
     public record WorkbookRequest(@NotEmpty @Size(max=200) List<@NotNull @Positive Long> tableIds) {}
