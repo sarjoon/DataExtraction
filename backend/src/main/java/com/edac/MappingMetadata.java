@@ -34,6 +34,7 @@ final class MappingMetadata {
                 Map<String,Object> sourceMetadata=new HashMap<>();
                 if(labels.contains("SOURCE_DATA_TYPE"))sourceMetadata.put("SOURCE_DATA_TYPE",rows.getString("SOURCE_DATA_TYPE"));
                 if(labels.contains("SOURCE_LENGTH"))sourceMetadata.put("SOURCE_LENGTH",(Number)rows.getObject("SOURCE_LENGTH"));
+                if(labels.contains("SOURCE_DECIMAL"))sourceMetadata.put("SOURCE_DECIMAL",(Number)rows.getObject("SOURCE_DECIMAL"));
                 result.add(new MappingField(column,String.join(",",keys),rows.getString("FIELD_DESCRIPTION"),rows.getString("DEFAULT_VALUE"),nullable==null?null:column.nullable()?"O":"M",sourceMetadata));
             }}
             if(result.isEmpty())throw new SourceTableUnavailableException("Table missing, inaccessible, or metadata query returned no columns.");

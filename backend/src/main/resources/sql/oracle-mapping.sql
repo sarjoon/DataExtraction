@@ -1,5 +1,5 @@
 WITH selected_table AS (
-    SELECT 'AAAMAINDB' AS owner, 'ACTIVITY' AS table_name
+    SELECT ? AS owner, ? AS table_name
     FROM dual
 ),
 column_keys AS (

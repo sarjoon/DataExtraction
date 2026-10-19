@@ -83,8 +83,8 @@ public class MappingWorkbookService {
             for(int i=originalCount-1;i>=1;i--)wb.removeSheetAt(i);
             if(!skipped.isEmpty()) {
                 var report=wb.createSheet("Generation Report");
-                var summary=report.createRow(0);summary.createCell(0).setCellValue("Selected: "+tables.size()+" | Generated: "+serial+" | Skipped: "+skipped.size());
-                report.addMergedRegion(new CellRangeAddress(0,0,0,3));
+                var summary=report.createRow(1);summary.createCell(0).setCellValue("Selected: "+tables.size()+" | Generated: "+serial+" | Skipped: "+skipped.size());
+                report.addMergedRegion(new CellRangeAddress(1,1,0,3));
                 String[] headers={"Schema","Table Name","Status","Reason"};var heading=report.createRow(2);
                 for(int c=0;c<headers.length;c++){var cell=heading.createCell(c);cell.setCellValue(headers[c]);cell.setCellStyle(spec.getRow(2).getCell(1).getCellStyle());}
                 int r=3;
@@ -96,10 +96,22 @@ public class MappingWorkbookService {
                 report.setColumnWidth(0,24*256);report.setColumnWidth(1,40*256);report.setColumnWidth(2,16*256);report.setColumnWidth(3,80*256);
                 report.createFreezePane(0,3);
             }
+            for(var sheet:wb)navigation(wb,(XSSFSheet)sheet,0,"Go to File Spec",spec.getSheetName());
+            if(wb.getSheet("Generation Report")!=null)navigation(wb,spec,3,"Generation Report","Generation Report");
             wb.setActiveSheet(0);spec.setSelected(true);
             wb.getCreationHelper().createFormulaEvaluator().evaluateAll();
             wb.write(output);return output.toByteArray();
         }
+    }
+    private static void navigation(XSSFWorkbook wb,XSSFSheet sheet,int column,String text,String target) {
+        var row=sheet.getRow(0);if(row==null)row=sheet.createRow(0);
+        var cell=row.getCell(column);if(cell==null)cell=row.createCell(column);
+        cell.setCellValue(text);
+        var link=wb.getCreationHelper().createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
+        link.setAddress("'"+target.replace("'","''")+"'!A1");cell.setHyperlink(link);
+        var style=wb.createCellStyle();style.cloneStyleFrom(cell.getCellStyle());
+        var font=wb.createFont();font.setColor(IndexedColors.BLUE.getIndex());font.setUnderline(Font.U_SINGLE);
+        style.setFont(font);cell.setCellStyle(style);
     }
     private static void addNavigationColumn(XSSFWorkbook wb,XSSFSheet spec) {
         // The reference template has 36 columns. Insert Link after File Name.
@@ -126,8 +138,8 @@ public class MappingWorkbookService {
         var c=field.column();String source=c.dataType()==null?"":c.dataType().toUpperCase(Locale.ROOT);
         String type=null,date=null;Number length=null,sourceLength=c.characterLength();Integer decimal=null;
         Integer integerLength=switch(source){case "TINYINT"->3;case "SMALLINT"->5;case "INTEGER","INT"->10;case "BIGINT"->19;default->null;};
-        if(source.equals("DATE")){type="D";date=prototype.getRow(5).getCell(8).getStringCellValue();length=date.length();}
-        else if(source.startsWith("TIMESTAMP")){type="T";date=prototype.getRow(6).getCell(8).getStringCellValue();length=date.length();}
+        if(source.equals("DATE")){type="D";date="YYYY-MM-DD";length=c.byteLength();sourceLength=c.byteLength();}
+        else if(source.startsWith("TIMESTAMP")){type="T";date="YYYY-MM-DD HH:MI:SS";length=c.byteLength();sourceLength=c.byteLength();}
         else if(integerLength!=null){type="N";length=integerLength;sourceLength=integerLength;decimal=c.scale();}
         else if(Set.of("NUMERIC","DECIMAL","NUMBER").contains(source)) {
             type="N";length=c.precision();sourceLength=c.precision();decimal=c.scale();
@@ -142,7 +154,7 @@ public class MappingWorkbookService {
         else if(sourceLength==null)sourceLength=c.byteLength();
         return new Object[]{serial,c.name(),type,length,decimal,field.key(),field.mandatory(),field.description(),date,field.defaultValue(),null,null,
             field.sourceMetadata().getOrDefault("SOURCE_DATA_TYPE",c.dataType()),
-            field.sourceMetadata().getOrDefault("SOURCE_LENGTH",sourceLength),c.scale()};
+            field.sourceMetadata().getOrDefault("SOURCE_LENGTH",sourceLength),field.sourceMetadata().getOrDefault("SOURCE_DECIMAL",c.scale())};
     }
     private static int findTrailer(XSSFSheet sheet){for(var row:sheet)if("Trailer".equals(new DataFormatter().formatCellValue(row.getCell(0))))return row.getRowNum();throw new IllegalStateException("Template Trailer section is missing.");}
     private static String uniqueName(String value,Set<String> used) {
