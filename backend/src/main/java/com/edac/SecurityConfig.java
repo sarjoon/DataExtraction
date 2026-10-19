@@ -43,7 +43,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(a -> {
                 a.requestMatchers("/h2-console/**").denyAll();
                 a.requestMatchers("/error").permitAll();
-                a.requestMatchers(HttpMethod.GET, "/", "/index.html", "/overview", "/connections", "/tables", "/mapping", "/generation", "/*.js", "/*.css", "/media/**", "/sample-tables.csv", "/favicon.ico").permitAll();
+                a.requestMatchers(HttpMethod.GET, "/", "/index.html", "/overview", "/connections", "/tables", "/mapping", "/generation", "/triggers", "/*.js", "/*.css", "/media/**", "/sample-tables.csv", "/sample-screens.csv", "/favicon.ico").permitAll();
                 if (local) a.requestMatchers("/api/**").permitAll();
                 else a.requestMatchers("/api/**").authenticated();
                 a.anyRequest().denyAll();

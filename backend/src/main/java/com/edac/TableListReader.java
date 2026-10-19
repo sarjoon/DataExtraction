@@ -11,12 +11,18 @@ import org.springframework.web.multipart.MultipartFile;
 @Component
 public class TableListReader {
     public List<String> read(MultipartFile file) throws IOException {
+        return read(file,false);
+    }
+    public List<String> readScreens(MultipartFile file) throws IOException {
+        return read(file,true);
+    }
+    private List<String> read(MultipartFile file,boolean screens) throws IOException {
         if(file.isEmpty()) throw new IllegalArgumentException("The uploaded file is empty.");
         String name=Objects.toString(file.getOriginalFilename(),"").toLowerCase(Locale.ROOT);
         List<List<String>> rows=new ArrayList<>();
         if(name.endsWith(".xlsx")) {
             try(var workbook=WorkbookFactory.create(file.getInputStream())) {
-                Sheet sheet=workbook.getSheet("FIle Spec");
+                Sheet sheet=screens?null:workbook.getSheet("FIle Spec");
                 if(sheet==null) sheet=workbook.getSheetAt(0);
                 var formatter=new DataFormatter(Locale.ROOT);
                 for(Row row:sheet) {
@@ -42,9 +48,9 @@ public class TableListReader {
         for(int r=0;r<Math.min(rows.size(),5);r++) {
             for(int c=0;c<rows.get(r).size();c++) {
                 String normalized=normalize(rows.get(r).get(c));
-                if(Set.of("tablename","filename").contains(normalized)) {
+                if((screens?Set.of("screenname"):Set.of("tablename","filename")).contains(normalized)) {
                     start=r+1;nameColumn=c;headerFound=true;
-                    for(int j=0;j<rows.get(r).size();j++)if(Set.of("schema","schemaname").contains(normalize(rows.get(r).get(j))))schemaColumn=j;
+                    if(!screens)for(int j=0;j<rows.get(r).size();j++)if(Set.of("schema","schemaname").contains(normalize(rows.get(r).get(j))))schemaColumn=j;
                     break;
                 }
             }
@@ -55,8 +61,8 @@ public class TableListReader {
             var row=rows.get(r);
             if(row.stream().allMatch(String::isBlank))continue;
             if(!headerFound && row.stream().filter(v->!v.isBlank()).count()>1)
-                throw new IllegalArgumentException("For multiple columns, include a Table Name or File Name header.");
-            if(row.size()<=nameColumn || row.get(nameColumn).isBlank())throw new IllegalArgumentException("Missing table name at row "+(r+1)+".");
+                throw new IllegalArgumentException(screens?"For multiple columns, include a Screen Name header.":"For multiple columns, include a Table Name or File Name header.");
+            if(row.size()<=nameColumn || row.get(nameColumn).isBlank())throw new IllegalArgumentException("Missing "+(screens?"screen":"table")+" name at row "+(r+1)+".");
             String table=row.get(nameColumn);
             if(schemaColumn>=0 && row.size()>schemaColumn && !row.get(schemaColumn).isBlank())table=row.get(schemaColumn)+"."+table;
             names.add(table);

@@ -13,6 +13,12 @@ Extraction Framework uses Angular and Spring Boot to prepare mapping workbooks a
 
 Prerequisites: Java 17+, Maven 3.9+, Node.js 22.12+ or 24+, npm for frontend builds.
 
+Complete Call Trigger is available from the Generation menu at `/triggers`. Select an Oracle connection and an Instrument to display its screens. Select all visible screens or individual screens to generate a report. Switching instruments clears the selection. To register screens, enter a new or existing Instrument name, upload a CSV/TXT/XLSX screen list (optional `Screen Name` header; Excel reads the first sheet), or enter one screen name per line. The instrument entered on the page applies to the entire upload. Names retain their case and are saved separately from tables in the H2 `screen_registry`, scoped to the connection and instrument. Duplicate screens within an instrument are skipped; the same screen can belong to different instruments. Flyway V6 preserves existing registrations under `Unassigned`. A sample CSV is available on the page.
+
+Select up to 200 screens to download `Complete_Call_Trigger.xlsx`. Each screen gets a tab with `TAP Field Name` (attribute `sqlname_c`) and `Complete Call Trigger` (unique extracted source fields, one per line). Analysis uses the selected connection's schema and saved credentials, prioritizes nature 10, then 2, then 1, combines definitions by rank, removes brace blocks, and applies the assignment extraction logic from `backend/error`. As in that original logic, only digit-only values are excluded. The original file is retained as a reference.
+
+Excel tab names are sanitized, truncated to 31 characters, and given unique suffixes where needed; the original screen name is saved in the first header's comment. Existing screens with no applicable definitions produce a header-only tab. A missing screen or query failure stops the export with an error, so no partial workbook is downloaded. The export limit is 50,000 attributes; values exceeding Excel's cell limit are reported rather than silently truncated.
+
 From `backend`:
 
 ```powershell

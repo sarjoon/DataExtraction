@@ -12,6 +12,7 @@ import { Api } from './api';
     <a routerLink="/connections" routerLinkActive="active"><span class="nav-icon">▤</span>Database connections</a>
     <a routerLink="/tables" routerLinkActive="active"><span class="nav-icon">▦</span>Table list<span class="nav-count">{{api.tables().length}}</span></a>
     <div class="nav-heading">GENERATION</div>
+    <a routerLink="/triggers" routerLinkActive="active"><span class="nav-icon">&#8644;</span>Complete Call Trigger</a>
     <a routerLink="/mapping" routerLinkActive="active"><span class="nav-icon">▧</span>Mapping workbook<span class="soon">01</span></a>
     <a routerLink="/generation" routerLinkActive="active"><span class="nav-icon">≡</span>Fixed-length files<span class="soon">02</span></a>
   </nav>

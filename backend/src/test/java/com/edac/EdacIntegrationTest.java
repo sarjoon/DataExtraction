@@ -35,6 +35,47 @@ class EdacIntegrationTest {
     @Autowired MappingWorkbookService workbooks;
     @Autowired RegistryService registry;
     @MockitoBean OracleSource oracle;
+    @MockitoBean TriggerAnalyzer triggers;
+    @Autowired TriggerService triggerService;
+    @Test void registersScreensAndExportsTriggersWithConnectionIsolation() throws Exception {
+        long id=connection(),other=connection();String path="/api/connections/"+id+"/screens";
+        var upload=new MockMultipartFile("file","screens.csv","text/csv","Screen Name\nPortfolio Screen\nPortfolio Screen\nPortfolio/Screen\nPortfolio:Screen\n".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart(path+"/import").file(upload).param("instrument","Bond").with(csrf())).andExpect(status().isOk())
+            .andExpect(jsonPath("$.added").value(3)).andExpect(jsonPath("$.skipped").value(1));
+        var rows=triggerService.screens(id);assertThat(rows).hasSize(3);
+        assertThat(registry.tables(id)).isEmpty();assertThat(triggerService.screens(other)).isEmpty();
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new TriggerController.ScreenNames("Bond",List.of("Valid"," "))))).andExpect(status().isBadRequest());
+        assertThat(triggerService.screens(id)).hasSize(3);
+        when(triggers.analyze(argThat(p->p.id()==id),eq("test-secret"),anyString())).thenReturn(List.of(new TriggerAnalyzer.TriggerField("portfolio_id","source_id\nsource.code")));
+        var body=json.writeValueAsString(new TriggerController.ScreenSelection(rows.stream().map(TriggerService.ScreenEntry::id).toList()));
+        var response=mvc.perform(post(path+"/workbook").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk()).andExpect(header().string("Content-Disposition","attachment; filename=Complete_Call_Trigger.xlsx")).andReturn();
+        try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(response.getResponse().getContentAsByteArray()))) {
+            assertThat(wb.getNumberOfSheets()).isEqualTo(3);
+            assertThat(wb.getSheet("Portfolio Screen")).isNotNull();
+            assertThat(java.util.stream.IntStream.range(0,3).mapToObj(wb::getSheetName).distinct().count()).isEqualTo(3);
+            for(var sheet:wb) {
+                assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("TAP Field Name");
+                assertThat(sheet.getRow(0).getCell(1).getStringCellValue()).isEqualTo("Complete Call Trigger");
+                assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("portfolio_id");
+                assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("source_id\nsource.code");
+            }
+        }
+        mvc.perform(post(path+"/workbook").contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/connections/"+other+"/screens/workbook").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
+        mvc.perform(post(path+"/workbook").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"screenIds\":[]}")).andExpect(status().isBadRequest());
+        assertThatThrownBy(()->triggerService.generate(id,List.of(rows.get(0).id(),rows.get(0).id()))).hasMessageContaining("distinct screens");
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new TriggerController.ScreenNames("Equity",List.of("Portfolio Screen")))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.added").value(1));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new TriggerController.ScreenNames("Equity",List.of("Portfolio Screen")))))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.skipped").value(1));
+        mvc.perform(get(path).param("instrument","Bond")).andExpect(jsonPath("$.length()").value(3)).andExpect(jsonPath("$[0].instrument").value("Bond"));
+        mvc.perform(get(path).param("instrument","Equity")).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(get("/api/connections/"+other+"/screens").param("instrument","Bond")).andExpect(jsonPath("$.length()").value(0));
+        long equity=triggerService.screens(id,"Equity").get(0).id();
+        assertThatThrownBy(()->triggerService.generate(id,List.of(rows.get(0).id(),equity))).hasMessageContaining("one instrument");
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"names\":[\"Missing Instrument\"]}")).andExpect(status().isBadRequest());
+    }
     Models.ConnectionInput input(String name, String password) {
         return new Models.ConnectionInput(name,"ORACLE","oracle.example.com",1521,"SERVICE_NAME","ORCLPDB1","app_user","APP",password);
     }
@@ -45,7 +86,7 @@ class EdacIntegrationTest {
         return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
     }
     @Test void usesH2ConfigurationAndSavedCredentialsForOracle() throws Exception {
-        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("4"));
+        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("6"));
         long id=connection();
         when(oracle.test(any(),eq("test-secret"))).thenReturn(new Models.TestResult(true,"Oracle test",List.of()));
         when(oracle.discover(any(),eq("test-secret"))).thenReturn(List.of(new Models.TableName("APP","CUSTOMER"),new Models.TableName("APP","ACCOUNT")));

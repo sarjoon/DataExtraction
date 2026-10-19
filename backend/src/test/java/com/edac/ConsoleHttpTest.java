@@ -14,7 +14,7 @@ import java.util.Map;
 class ConsoleHttpTest {
     @Autowired TestRestTemplate http;
     @Test void servesBundledFrontendAndDirectAngularRoutes() {
-        for (String path : new String[]{"/", "/index.html", "/overview", "/connections", "/tables", "/mapping", "/generation"}) {
+        for (String path : new String[]{"/", "/index.html", "/overview", "/connections", "/tables", "/mapping", "/generation", "/triggers"}) {
             var response = http.getForEntity(path, String.class);
             assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
             assertThat(response.getBody()).contains("<edac-root>");
@@ -23,6 +23,7 @@ class ConsoleHttpTest {
         var scripts = java.util.regex.Pattern.compile("src=\"([^\"]+\\.js)\"").matcher(index);
         assertThat(scripts.find()).isTrue();
         assertThat(http.getForEntity("/" + scripts.group(1), String.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(http.getForEntity("/sample-screens.csv",String.class).getBody()).contains("Screen Name");
     }
     @Test void realCookieProtectsWritesAndConsoleAllowsSameOriginFrames() {
         var csrf=http.getForEntity("/api/csrf",Map.class);

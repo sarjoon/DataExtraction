@@ -29,8 +29,14 @@ export class Api {
     return firstValueFrom(this.http.post<T>('/api'+path,body));
   }
   async downloadWorkbook(connectionId:number,tableIds:number[]){
+    return this.download(`/connections/${connectionId}/mapping-workbook`,{tableIds});
+  }
+  async downloadTriggers(connectionId:number,screenIds:number[]){
+    return this.download(`/connections/${connectionId}/screens/workbook`,{screenIds});
+  }
+  private async download(path:string,body:unknown){
     await this.get('/csrf');
-    try{return await firstValueFrom(this.http.post('/api/connections/'+connectionId+'/mapping-workbook',{tableIds},{responseType:'blob'}));}
+    try{return await firstValueFrom(this.http.post('/api'+path,body,{responseType:'blob'}));}
     catch(error){if(error instanceof HttpErrorResponse && error.error instanceof Blob){let message='Workbook generation failed.';try{message=JSON.parse(await error.error.text()).message??message;}catch{}throw new Error(message);}throw error;}
   }
   async select(id:number|null){this.selectedId.set(id);this.tables.set([]);if(id!==null){localStorage.setItem('edac.connection',String(id));await this.refresh();}}
