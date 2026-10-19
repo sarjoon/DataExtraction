@@ -1,27 +1,178 @@
-2026-10-16T16:27:00.701+08:00  INFO 20648 --- [edac] [           main] [                                                 ] com.edac.ProductionSecurityTest          : Started ProductionSecurityTest in 6.108 seconds (process running for 61.781)
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 6.456 s -- in com.edac.ProductionSecurityTest
-[INFO]
-[INFO] Results:
-[INFO]
-[ERROR] Errors:
-[ERROR]   OracleSourceTest.columnsBindTableAndPreserveNullableMetadata:51 » NullPointer Cannot invoke "java.sql.PreparedStatement.setString(int, String)" because "statement" is null
-[INFO]
-[ERROR] Tests run: 24, Failures: 0, Errors: 1, Skipped: 0
-[INFO]
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD FAILURE
-[INFO] ------------------------------------------------------------------------
-[INFO] Total time: 01:36 min
-[INFO] Finished at: 2026-10-16T16:27:08+08:00
-[INFO] ------------------------------------------------------------------------
-[ERROR] Failed to execute goal org.apache.maven.plugins:maven-surefire-plugin:3.2.5:test (default-test) on project edac-backend:
-[ERROR]
-[ERROR] Please refer to C:\Projects\DataExtraction\DataExtraction\backend\target\surefire-reports for the individual test results.
-[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
-[ERROR] -> [Help 1]
-[ERROR]
-[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
-[ERROR] Re-run Maven using the -X switch to enable full debug logging.
-[ERROR]
-[ERROR] For more information about the errors and possible solutions, please read the following articles:
-[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+import java.sql.*;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class RuleAnalyzer {
+
+    private final Connection conn;
+
+    public RuleAnalyzer(Connection conn) {
+        this.conn = conn;
+    }
+
+    public void analyzeScreen(String screenName) throws Exception {
+
+        String mainSql =
+            "SELECT DISTINCT da.sqlname_c " +
+            "FROM script_definition sd " +
+            "INNER JOIN dict_attribute da " +
+            "ON da.dict_id = sd.attribute_dict_id " +
+            "WHERE sd.object_id IN " +
+            "(SELECT dict_id FROM dict_screen WHERE name = ?)";
+
+        try (PreparedStatement ps = conn.prepareStatement(mainSql)) {
+
+            ps.setString(1, screenName);
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+
+                String attributeName = rs.getString("sqlname_c");
+
+                String definition = getDefinition(attributeName, screenName);
+
+                if (definition == null || definition.isEmpty()) {
+                    continue;
+                }
+
+                // Remove {...}
+                definition = removeCurlyBraces(definition);
+
+                System.out.println("--------------------------------");
+                System.out.println("ATTRIBUTE : " + attributeName);
+
+                Set<String> dependencies =
+                    extractSourceFields(definition);
+
+                System.out.println("DEPENDENCIES:");
+
+                for (String dep : dependencies) {
+                    System.out.println("  " + dep);
+                }
+            }
+        }
+    }
+
+    private String getDefinition(
+            String attributeName,
+            String screenName) throws SQLException {
+
+        String sql =
+        """
+        WITH selected_nature AS (
+            SELECT CASE
+                     WHEN EXISTS (
+                         SELECT 1
+                         FROM script_definition sd
+                         INNER JOIN dict_attribute da
+                             ON da.dict_id = sd.attribute_dict_id
+                         WHERE sd.object_id IN (
+                                 SELECT dict_id
+                                 FROM dict_screen
+                                 WHERE name = ?
+                               )
+                           AND da.sqlname_c = ?
+                           AND sd.nature_e = 10
+                     ) THEN 10
+
+                     WHEN EXISTS (
+                         SELECT 1
+                         FROM script_definition sd
+                         INNER JOIN dict_attribute da
+                             ON da.dict_id = sd.attribute_dict_id
+                         WHERE sd.object_id IN (
+                                 SELECT dict_id
+                                 FROM dict_screen
+                                 WHERE name = ?
+                               )
+                           AND da.sqlname_c = ?
+                           AND sd.nature_e = 2
+                     ) THEN 2
+
+                     ELSE 1
+                   END AS nature_e
+            FROM dual
+        )
+        SELECT XMLCAST(
+               XMLAGG(
+                  XMLELEMENT(e, sd.definition_c || CHR(10))
+                  ORDER BY sd.rank_n
+               ) AS CLOB
+               ) AS definition_c
+        FROM script_definition sd
+        INNER JOIN dict_attribute da
+            ON da.dict_id = sd.attribute_dict_id
+        INNER JOIN selected_nature sn
+            ON sn.nature_e = sd.nature_e
+        WHERE sd.object_id IN (
+                SELECT dict_id
+                FROM dict_screen
+                WHERE name = ?
+              )
+          AND da.sqlname_c = ?
+        """;
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, screenName);
+            ps.setString(2, attributeName);
+
+            ps.setString(3, screenName);
+            ps.setString(4, attributeName);
+
+            ps.setString(5, screenName);
+            ps.setString(6, attributeName);
+
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                return rs.getString(1);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Removes:
+     * {xxxxx}
+     */
+    private String removeCurlyBraces(String text) {
+
+        return text.replaceAll("\\{[^}]*\\}", "");
+    }
+
+    /**
+     * Extracts:
+     *
+     * &portfolio_id = portfolio_id
+     * &ref_curr_id.code = op_currency_id.code
+     *
+     * Returns:
+     * portfolio_id
+     * op_currency_id.code
+     */
+    private Set<String> extractSourceFields(String script) {
+
+        Set<String> result = new LinkedHashSet<>();
+
+        Pattern p = Pattern.compile(
+            "&[A-Za-z0-9_\\.]+\\s*=\\s*([A-Za-z0-9_\\.]+)"
+        );
+
+        Matcher m = p.matcher(script);
+
+        while (m.find()) {
+
+            String sourceField = m.group(1);
+
+            if (!sourceField.matches("\\d+")) {
+                result.add(sourceField);
+            }
+        }
+
+        return result;
+    }
+}
