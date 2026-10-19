@@ -8,7 +8,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class TriggerAnalyzer {
     public record TriggerField(String attributeName,String completeCallTrigger) {}
-    private static final Pattern SOURCE_FIELD=Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_]*_id(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\b");
+    private static final String IDENTIFIER="[A-Za-z_][A-Za-z0-9_]*(?:\\s*\\.\\s*[A-Za-z_][A-Za-z0-9_]*)*";
+    // Consume literals, brace blocks and assignment targets before looking for field tokens.
+    private static final Pattern SOURCE_TOKEN=Pattern.compile(
+        "\"(?:\\\\.|\"\"|[^\"\\\\])*\"|'(?:\\\\.|''|[^'\\\\])*'|\\{[^}]*\\}"
+        +"|&"+IDENTIFIER+"\\s*=(?!=)|\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b|(?<field>"+IDENTIFIER+")");
+    private static final Set<String> CONSTANTS=Set.of("IF","THEN","ELSE","END","CASE","WHEN","AND","OR","NOT","NULL","TRUE","FALSE","IS","IN","LIKE","BETWEEN",
+        "YEAR","YEARS","QUARTER","QUARTERS","MONTH","MONTHS","WEEK","WEEKS","DAY","DAYS","HOUR","HOURS","MINUTE","MINUTES","SECOND","SECONDS","MILLISECOND","MILLISECONDS");
     private final OracleConnectionFactory connections;
     public TriggerAnalyzer(OracleConnectionFactory connections){this.connections=connections;}
 
@@ -47,16 +53,26 @@ public class TriggerAnalyzer {
                 definitions.forEach((attribute,byNature)->{
                     int nature=byNature.containsKey(10)?10:byNature.containsKey(2)?2:1;
                     var definition=byNature.get(nature);
-                    if(definition!=null && !definition.isEmpty())result.add(new TriggerField(attribute,extract(definition.toString())));
+                    if(definition!=null && !definition.isEmpty())result.add(new TriggerField(attribute,extract(definition.toString(),attribute)));
                 });
                 return result;
             }
         }catch(SQLException e){throw new IllegalArgumentException("Trigger analysis failed for screen "+screen+" (database error "+e.getErrorCode()+"). Check the Oracle connection and dictionary permissions.");}
     }
     static String extract(String definition) {
-        var matcher=SOURCE_FIELD.matcher(definition.replaceAll("\\{[^}]*\\}",""));
-        Set<String> fields=new LinkedHashSet<>();
-        while(matcher.find())fields.add(matcher.group());
-        return String.join("\n",fields);
+        return extract(definition,null);
+    }
+    static String extract(String definition,String attribute) {
+        var matcher=SOURCE_TOKEN.matcher(definition);
+        Map<String,String> fields=new LinkedHashMap<>();
+        while(matcher.find()) {
+            String field=matcher.group("field");if(field==null)continue;
+            field=field.replaceAll("\\s+","");
+            int next=matcher.end();while(next<definition.length() && Character.isWhitespace(definition.charAt(next)))next++;
+            if(next<definition.length() && definition.charAt(next)=='(')continue;
+            if(CONSTANTS.contains(field.toUpperCase(Locale.ROOT)) || field.equalsIgnoreCase(attribute))continue;
+            fields.putIfAbsent(field.toLowerCase(Locale.ROOT),field);
+        }
+        return String.join("\n",fields.values());
     }
 }
