@@ -1,5 +1,5 @@
 WITH selected_table AS (
-    SELECT ? AS owner, ? AS table_name
+    SELECT 'AAAMAINDB' AS owner, 'ACTIVITY' AS table_name
     FROM dual
 ),
 column_keys AS (
@@ -26,20 +26,51 @@ SELECT
     c.column_id AS COLUMN_ID,
     c.column_name AS COLUMN_NAME,
     c.data_type AS DATA_TYPE,
-    c.data_length AS DATA_LENGTH,
+    CASE
+        WHEN c.data_type IN ('CLOB', 'BLOB') THEN 3000
+        WHEN c.data_type = 'TIMESTAMP(6)' THEN 19
+        WHEN c.data_type = 'DATE' THEN 10
+        ELSE c.data_length
+    END AS DATA_LENGTH,
     CASE WHEN c.char_used IS NOT NULL
          THEN c.char_length END AS CHAR_LENGTH,
     c.data_precision AS DATA_PRECISION,
     c.data_scale AS DATA_SCALE,
     c.nullable AS IS_NULLABLE,
-    cc.comments AS FIELD_DESCRIPTION,
+    da.name AS FIELD_DESCRIPTION,
     CAST(NULL AS VARCHAR2(4000)) AS DEFAULT_VALUE,
     k.PK_FLAG,
     k.FK_FLAG,
-
+    
     da.sqlname_c AS SOURCE_DATA_TYPE,
-    dd.DEF_MAX_DB_LEN_N AS SOURCE_LENGTH
-
+    CASE
+        WHEN c.data_type IN ('CLOB', 'BLOB') THEN 3000
+    
+        WHEN c.data_type = 'NUMBER'
+             THEN TO_NUMBER(REGEXP_SUBSTR(dd.EQUIV_TYPE_ORA_C, '[0-9]+'))
+    
+        WHEN c.data_type = 'TIMESTAMP(6)' THEN 19
+        WHEN c.data_type = 'DATE' THEN 10
+        ELSE da.MAX_DB_LEN_N
+    END AS SOURCE_LENGTH,
+    CASE
+        WHEN c.data_type = 'NUMBER' THEN
+            NVL(
+                TO_NUMBER(
+                    REGEXP_SUBSTR(
+                        dd.EQUIV_TYPE_ORA_C,
+                        ',([0-9]+)',
+                        1,
+                        1,
+                        NULL,
+                        1
+                    )
+                ),
+                0
+            )
+        ELSE 0
+    END AS SOURCE_DECIMAL
+    
 FROM selected_table s
 JOIN all_tab_columns c
   ON c.owner = s.owner
