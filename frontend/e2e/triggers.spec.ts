@@ -12,7 +12,11 @@ test('screen registration, selection, workbook download and connection reset',as
     else if(path.endsWith('/screens/workbook')){
       selection=request.postDataJSON().screenIds;
       await route.fulfill({contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',body:'workbook'});return;
-    }else if(path.endsWith('/screens/import'))body={added:1,skipped:0,total:screens.length};
+    }else if(path.endsWith('/screens/import')){
+      expect(request.postData()).toContain('Instrument,Screen Name');
+      expect(request.postData()).toContain('Equity,Equity Screen');
+      body={added:1,skipped:0,total:screens.length};
+    }
     else if(path.endsWith('/screens')){
       if(request.method()==='POST'){
         expect(request.postDataJSON().instrument).toBe('Bond');expect(request.postDataJSON().names).toEqual(['New Screen']);screens.push({id:13,instrument:'Bond',name:'New Screen',source:'MANUAL'});
@@ -41,7 +45,8 @@ test('screen registration, selection, workbook download and connection reset',as
   await expect(page.getByRole('cell',{name:'Portfolio Screen',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Generate workbook',exact:true})).toBeDisabled();
   await page.getByRole('combobox',{name:'Instrument',exact:true}).selectOption('Bond');
-  await page.getByLabel('Choose screen list',{exact:true}).setInputFiles({name:'screens.csv',mimeType:'text/csv',buffer:Buffer.from('Screen Name\nPortfolio Screen')});
+  await page.getByLabel('Instrument name for registration',{exact:true}).fill('');
+  await page.getByLabel('Choose screen list',{exact:true}).setInputFiles({name:'screens.csv',mimeType:'text/csv',buffer:Buffer.from('Instrument,Screen Name\nBond,Portfolio Screen\nEquity,Equity Screen')});
   await page.getByRole('button',{name:'Upload & append',exact:true}).click();
   await expect(page.getByRole('status').filter({hasText:'screen(s) added'})).toBeVisible();
   await page.getByRole('combobox',{name:'Oracle connection',exact:true}).selectOption({label:'Oracle B · APP'});

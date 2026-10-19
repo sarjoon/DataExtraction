@@ -10,6 +10,31 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Component
 public class TableListReader {
+    public record ScreenRegistration(String instrument,String name) {}
+    public List<ScreenRegistration> readInstrumentScreens(MultipartFile file,String fallbackInstrument) throws IOException {
+        var rows=readRows(file,true);int header=-1,instrumentColumn=-1,nameColumn=-1;
+        for(int r=0;r<Math.min(rows.size(),5);r++) {
+            int candidateName=-1,candidateInstrument=-1;
+            for(int c=0;c<rows.get(r).size();c++) {
+                String label=normalize(rows.get(r).get(c));
+                if(label.equals("screenname"))candidateName=c;
+                if(Set.of("instrument","instrumentname").contains(label))candidateInstrument=c;
+            }
+            if(candidateName>=0){header=r;nameColumn=candidateName;instrumentColumn=candidateInstrument;break;}
+        }
+        if(instrumentColumn<0) {
+            if(fallbackInstrument==null || fallbackInstrument.isBlank())throw new IllegalArgumentException("Include Instrument and Screen Name columns, or enter an instrument for a screen-only file.");
+            return screenNames(rows,true).stream().map(name->new ScreenRegistration(fallbackInstrument,name)).toList();
+        }
+        List<ScreenRegistration> result=new ArrayList<>();
+        for(int r=header+1;r<rows.size();r++) {
+            var row=rows.get(r);if(row.stream().allMatch(String::isBlank))continue;
+            if(row.size()<=instrumentColumn || row.get(instrumentColumn).isBlank())throw new IllegalArgumentException("Missing instrument at row "+(r+1)+".");
+            if(row.size()<=nameColumn || row.get(nameColumn).isBlank())throw new IllegalArgumentException("Missing screen name at row "+(r+1)+".");
+            result.add(new ScreenRegistration(row.get(instrumentColumn),row.get(nameColumn)));
+        }
+        return result;
+    }
     public List<String> read(MultipartFile file) throws IOException {
         return read(file,false);
     }
@@ -17,6 +42,9 @@ public class TableListReader {
         return read(file,true);
     }
     private List<String> read(MultipartFile file,boolean screens) throws IOException {
+        return screenNames(readRows(file,screens),screens);
+    }
+    private List<List<String>> readRows(MultipartFile file,boolean screens) throws IOException {
         if(file.isEmpty()) throw new IllegalArgumentException("The uploaded file is empty.");
         String name=Objects.toString(file.getOriginalFilename(),"").toLowerCase(Locale.ROOT);
         List<List<String>> rows=new ArrayList<>();
@@ -43,6 +71,9 @@ public class TableListReader {
             }
         } else throw new IllegalArgumentException("Upload a .csv, .txt or .xlsx table list.");
         rows.replaceAll(row -> row.stream().map(v->v.replace("\uFEFF","").trim()).toList());
+        return rows;
+    }
+    private List<String> screenNames(List<List<String>> rows,boolean screens) {
         int start=0,nameColumn=0,schemaColumn=-1;
         boolean headerFound=false;
         for(int r=0;r<Math.min(rows.size(),5);r++) {

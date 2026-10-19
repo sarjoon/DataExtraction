@@ -1,3 +1,5 @@
-Screen Name
-Portfolio Screen
-Account Screen
+Instrument,Screen Name
+Bond,Portfolio Screen
+Bond,Account Screen
+Equity,Portfolio Screen
+Equity,Equity Screen

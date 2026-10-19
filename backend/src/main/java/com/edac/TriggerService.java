@@ -44,20 +44,26 @@ public class TriggerService {
     }
     @Transactional
     public Models.AppendResult append(long id,String instrument,List<String> names,String source) {
+        if(names==null)throw new IllegalArgumentException("Provide screen names.");
+        var result=register(id,names.stream().map(name->new TableListReader.ScreenRegistration(instrument,name)).toList(),source);
+        return new Models.AppendResult(result.added(),result.skipped(),screens(id,instrumentName(instrument)).size());
+    }
+    @Transactional
+    public Models.AppendResult register(long id,List<TableListReader.ScreenRegistration> entries,String source) {
         profile(id);
-        String group=instrumentName(instrument);
-        if(names==null || names.isEmpty() || names.size()>10000)throw new IllegalArgumentException("Provide between 1 and 10,000 screen names.");
-        List<String> cleaned=new ArrayList<>();
-        for(String name:names) {
+        if(entries==null || entries.isEmpty() || entries.size()>10000)throw new IllegalArgumentException("Provide between 1 and 10,000 screen names.");
+        List<TableListReader.ScreenRegistration> cleaned=new ArrayList<>();
+        for(var entry:entries) {
+            String group=instrumentName(entry.instrument());String name=entry.name();
             if(name==null || name.isBlank() || name.trim().length()>256 || name.chars().anyMatch(Character::isISOControl))
                 throw new IllegalArgumentException("Screen names must contain 1 to 256 characters without control characters.");
-            cleaned.add(name.trim());
+            cleaned.add(new TableListReader.ScreenRegistration(group,name.trim()));
         }
         int added=0;
-        for(String name:cleaned)try {
-            db.update("INSERT INTO screen_registry(connection_id,instrument,screen_name,source) VALUES(?,?,?,?)",id,group,name,source);added++;
+        for(var entry:cleaned)try {
+            db.update("INSERT INTO screen_registry(connection_id,instrument,screen_name,source) VALUES(?,?,?,?)",id,entry.instrument(),entry.name(),source);added++;
         }catch(DuplicateKeyException duplicate){/* Preserve existing screen registrations. */}
-        return new Models.AppendResult(added,names.size()-added,screens(id,group).size());
+        return new Models.AppendResult(added,entries.size()-added,screens(id).size());
     }
     public byte[] generate(long id,List<Long> ids) throws IOException {
         var profile=profile(id);

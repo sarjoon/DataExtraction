@@ -37,6 +37,19 @@ class EdacIntegrationTest {
     @MockitoBean OracleSource oracle;
     @MockitoBean TriggerAnalyzer triggers;
     @Autowired TriggerService triggerService;
+    @Test void uploadsInstrumentScreenPairsWithoutAnInstrumentParameter() throws Exception {
+        long id=connection();String path="/api/connections/"+id+"/screens";
+        var upload=new MockMultipartFile("file","screens.csv","text/csv","Instrument,Screen Name\nBond,Portfolio Screen\nBond,Account Screen\nEquity,Portfolio Screen\nBond,Portfolio Screen".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart(path+"/import").file(upload).with(csrf())).andExpect(status().isOk())
+            .andExpect(jsonPath("$.added").value(3)).andExpect(jsonPath("$.skipped").value(1));
+        assertThat(triggerService.screens(id,"Bond")).hasSize(2);assertThat(triggerService.screens(id,"Equity")).hasSize(1);
+        var invalid=new MockMultipartFile("file","bad.csv","text/csv","Instrument,Screen Name\nFund,New Screen\n,Missing Instrument".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart(path+"/import").file(invalid).with(csrf())).andExpect(status().isBadRequest());
+        assertThat(triggerService.screens(id,"Fund")).isEmpty();
+        assertThatThrownBy(()->triggerService.register(id,List.of(new TableListReader.ScreenRegistration("Fund","New Screen"),new TableListReader.ScreenRegistration("Fund"," ")),"UPLOAD"))
+            .hasMessageContaining("Screen names");
+        assertThat(triggerService.screens(id,"Fund")).isEmpty();
+    }
     @Test void registersScreensAndExportsTriggersWithConnectionIsolation() throws Exception {
         long id=connection(),other=connection();String path="/api/connections/"+id+"/screens";
         var upload=new MockMultipartFile("file","screens.csv","text/csv","Screen Name\nPortfolio Screen\nPortfolio Screen\nPortfolio/Screen\nPortfolio:Screen\n".getBytes(StandardCharsets.UTF_8));
