@@ -8,7 +8,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class TriggerAnalyzer {
     public record TriggerField(String attributeName,String completeCallTrigger) {}
-    private static final Pattern ASSIGNMENT=Pattern.compile("&[A-Za-z0-9_\\.]+\\s*=\\s*([A-Za-z0-9_\\.]+)");
+    private static final Pattern SOURCE_FIELD=Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_]*_id(?:\\.[A-Za-z_][A-Za-z0-9_]*)*\\b");
     private final OracleConnectionFactory connections;
     public TriggerAnalyzer(OracleConnectionFactory connections){this.connections=connections;}
 
@@ -54,9 +54,9 @@ public class TriggerAnalyzer {
         }catch(SQLException e){throw new IllegalArgumentException("Trigger analysis failed for screen "+screen+" (database error "+e.getErrorCode()+"). Check the Oracle connection and dictionary permissions.");}
     }
     static String extract(String definition) {
-        var matcher=ASSIGNMENT.matcher(definition.replaceAll("\\{[^}]*\\}",""));
+        var matcher=SOURCE_FIELD.matcher(definition.replaceAll("\\{[^}]*\\}",""));
         Set<String> fields=new LinkedHashSet<>();
-        while(matcher.find()){String field=matcher.group(1);if(!field.matches("\\d+"))fields.add(field);}
+        while(matcher.find())fields.add(matcher.group());
         return String.join("\n",fields);
     }
 }
