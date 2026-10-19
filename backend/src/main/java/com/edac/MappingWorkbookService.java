@@ -149,7 +149,8 @@ public class MappingWorkbookService {
             type="N";sourceLength=c.precision();decimal=c.scale();
             // Floating-point precision is not a fixed output width; leave Length blank.
         }
-        else if(source.contains("CHAR") || Set.of("CLOB","NCLOB","VARCHAR2","NVARCHAR2").contains(source)) {type="A";length=c.characterLength();}
+        else if(Set.of("CLOB","NCLOB","BLOB").contains(source)) {type="A";length=c.byteLength();sourceLength=c.byteLength();}
+        else if(source.contains("CHAR") || Set.of("VARCHAR2","NVARCHAR2").contains(source)) {type="A";length=c.characterLength();}
         else if(source.equals("BOOLEAN")){type="A";length=5;}
         else if(sourceLength==null)sourceLength=c.byteLength();
         return new Object[]{serial,c.name(),type,length,decimal,field.key(),field.mandatory(),field.description(),date,field.defaultValue(),null,null,
