@@ -65,6 +65,8 @@ test('screen registration, selection, workbook download and connection reset',as
   await expect(page.getByLabel('Include Portfolio Screen.VALUE_D',{exact:true})).not.toBeChecked();
   await page.getByLabel('Choose readable fields',{exact:true}).setInputFiles({name:'readable.csv',mimeType:'text/csv',buffer:Buffer.from('Screen Name,Field Name\nAccount Screen,VALUE_D')});
   await page.getByRole('button',{name:'Upload readable fields',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Remove Account Screen.VALUE_D',exact:true})).toHaveCount(0);
+  await page.getByRole('combobox',{name:'Screen for readable fields',exact:true}).selectOption({label:'Account Screen'});
   await expect(page.getByRole('button',{name:'Remove Account Screen.VALUE_D',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Remove Account Screen.VALUE_D',exact:true}).click();
   await expect(page.getByRole('button',{name:'Remove Account Screen.VALUE_D',exact:true})).toHaveCount(0);
