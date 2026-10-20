@@ -7,14 +7,15 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TriggerAnalyzer {
-    public record TriggerField(String attributeName,String completeCallTrigger) {}
+    public record TriggerField(String attributeName,String completeCallTrigger,String dropDownNature,String fullRule) {
+        public TriggerField(String attributeName,String completeCallTrigger){this(attributeName,completeCallTrigger,"","");}
+    }
     private static final String IDENTIFIER="[A-Za-z_][A-Za-z0-9_]*(?:\\s*\\.\\s*[A-Za-z_][A-Za-z0-9_]*)*";
-    // Consume literals, brace blocks and assignment targets before looking for field tokens.
+    // Consume literals and comments as whole tokens; only identifiers become candidate fields.
     private static final Pattern SOURCE_TOKEN=Pattern.compile(
         "\"(?:\\\\.|\"\"|[^\"\\\\])*\"|'(?:\\\\.|''|[^'\\\\])*'|\\{[^}]*\\}"
-        +"|&"+IDENTIFIER+"\\s*=(?!=)|\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b|(?<field>"+IDENTIFIER+")");
-    private static final Set<String> CONSTANTS=Set.of("IF","THEN","ELSE","END","CASE","WHEN","AND","OR","NOT","NULL","TRUE","FALSE","IS","IN","LIKE","BETWEEN",
-        "YEAR","YEARS","QUARTER","QUARTERS","MONTH","MONTHS","WEEK","WEEKS","DAY","DAYS","HOUR","HOURS","MINUTE","MINUTES","SECOND","SECONDS","MILLISECOND","MILLISECONDS");
+        +"|\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b|(?<field>"+IDENTIFIER+")");
+    private static final Set<String> CONSTANTS=Set.of("IF","THEN","ELSE","END","CASE","WHEN","AND","OR","NOT","NULL","TRUE","FALSE","IS","IN","LIKE","BETWEEN");
     private final OracleConnectionFactory connections;
     public TriggerAnalyzer(OracleConnectionFactory connections){this.connections=connections;}
 
@@ -53,7 +54,7 @@ public class TriggerAnalyzer {
                 definitions.forEach((attribute,byNature)->{
                     int nature=byNature.containsKey(10)?10:byNature.containsKey(2)?2:1;
                     var definition=byNature.get(nature);
-                    if(definition!=null && !definition.isEmpty())result.add(new TriggerField(attribute,extract(definition.toString(),attribute)));
+                    if(definition!=null && !definition.isEmpty())result.add(describe(attribute,definition.toString()));
                 });
                 return result;
             }
@@ -69,10 +70,22 @@ public class TriggerAnalyzer {
             String field=matcher.group("field");if(field==null)continue;
             field=field.replaceAll("\\s+","");
             int next=matcher.end();while(next<definition.length() && Character.isWhitespace(definition.charAt(next)))next++;
-            if(next<definition.length() && definition.charAt(next)=='(')continue;
-            if(CONSTANTS.contains(field.toUpperCase(Locale.ROOT)) || field.equalsIgnoreCase(attribute))continue;
+            int previous=matcher.start()-1;while(previous>=0 && Character.isWhitespace(definition.charAt(previous)))previous--;
+            if(previous>=0 && definition.charAt(previous)=='.')continue; // e.g. GET_OBJECT(...).id
+            if(next<definition.length() && definition.charAt(next)=='(' && !field.contains("."))continue;
+            field=field.split("\\.",2)[0];
+            if(CONSTANTS.contains(field.toUpperCase(Locale.ROOT)))continue;
             fields.putIfAbsent(field.toLowerCase(Locale.ROOT),field);
         }
         return String.join("\n",fields.values());
+    }
+    static TriggerField describe(String attribute,String definition) {
+        boolean dropdown=false;var matcher=SOURCE_TOKEN.matcher(definition);
+        while(matcher.find()) {
+            if(!"ENUM_LIST".equalsIgnoreCase(matcher.group("field")))continue;
+            int next=matcher.end();while(next<definition.length() && Character.isWhitespace(definition.charAt(next)))next++;
+            if(next<definition.length() && definition.charAt(next)=='('){dropdown=true;break;}
+        }
+        return new TriggerField(attribute,extract(definition),dropdown?definition:"",definition);
     }
 }

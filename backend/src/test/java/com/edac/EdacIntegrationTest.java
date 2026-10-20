@@ -59,7 +59,9 @@ class EdacIntegrationTest {
         assertThat(registry.tables(id)).isEmpty();assertThat(triggerService.screens(other)).isEmpty();
         mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new TriggerController.ScreenNames("Bond",List.of("Valid"," "))))).andExpect(status().isBadRequest());
         assertThat(triggerService.screens(id)).hasSize(3);
-        when(triggers.analyze(argThat(p->p.id()==id),eq("test-secret"),anyString())).thenReturn(List.of(new TriggerAnalyzer.TriggerField("portfolio_id","source_id\nsource.code")));
+        when(triggers.analyze(argThat(p->p.id()==id),eq("test-secret"),anyString())).thenReturn(List.of(
+            TriggerAnalyzer.describe("portfolio_id","IF(source_id <> NULL, source.code, source_id)"),
+            TriggerAnalyzer.describe("nature_e","ENUM_LIST(0,1,4,6)")));
         var body=json.writeValueAsString(new TriggerController.ScreenSelection(rows.stream().map(TriggerService.ScreenEntry::id).toList()));
         var response=mvc.perform(post(path+"/workbook").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isOk()).andExpect(header().string("Content-Disposition","attachment; filename=Complete_Call_Trigger.xlsx")).andReturn();
@@ -71,7 +73,12 @@ class EdacIntegrationTest {
                 assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("TAP Field Name");
                 assertThat(sheet.getRow(0).getCell(1).getStringCellValue()).isEqualTo("Complete Call Trigger");
                 assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("portfolio_id");
-                assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("source_id\nsource.code");
+                assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("source_id\nsource");
+                assertThat(sheet.getRow(0).getCell(2).getStringCellValue()).isEqualTo("Drop Down Nature");
+                assertThat(sheet.getRow(0).getCell(3).getStringCellValue()).isEqualTo("Complete Rule");
+                assertThat(sheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("IF(source_id <> NULL, source.code, source_id)");
+                assertThat(sheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("ENUM_LIST(0,1,4,6)");
+                assertThat(((org.apache.poi.xssf.usermodel.XSSFDrawing)sheet.getDrawingPatriarch()).getShapes().stream().filter(shape->shape instanceof org.apache.poi.xssf.usermodel.XSSFPicture).count()).isEqualTo(2);
             }
         }
         mvc.perform(post(path+"/workbook").contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
