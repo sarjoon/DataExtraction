@@ -81,14 +81,13 @@ public class TriggerService {
         try(var wb=new XSSFWorkbook();var output=new ByteArrayOutputStream()) {
             var heading=wb.createCellStyle();var font=wb.createFont();font.setBold(true);heading.setFont(font);
             var body=wb.createCellStyle();body.setWrapText(true);body.setVerticalAlignment(VerticalAlignment.TOP);
-            Set<String> used=new HashSet<>();int count=0;long imageBytes=0;
+            Set<String> used=new HashSet<>();int count=0;
             for(var screen:selected) {
                 var fields=analyzer.analyze(profile,password,screen.name());
                 count+=fields.size();if(count>50000)throw new IllegalArgumentException("Select fewer screens: the workbook limit is 50,000 attributes.");
                 var sheet=wb.createSheet(sheetName(screen.name(),used));
                 var header=sheet.createRow(0);header.createCell(0).setCellValue("TAP Field Name");header.createCell(1).setCellValue("Complete Call Trigger");
-                header.createCell(2).setCellValue("Drop Down Nature");header.createCell(3).setCellValue("Complete Rule");header.createCell(4).setCellValue("Rule Image");
-                header.createCell(5).setCellValue("Screen Name");
+                header.createCell(2).setCellValue("Drop Down Nature");header.createCell(3).setCellValue("Complete Rule");header.createCell(4).setCellValue("Screen Name");
                 header.forEach(cell->cell.setCellStyle(heading));
                 int rowNumber=1;
                 for(var field:fields) {
@@ -97,28 +96,14 @@ public class TriggerService {
                     var row=sheet.createRow(rowNumber++);
                     String keywords=field.completeCallTrigger().replace("\\r\\n","\n").replace("\\n","\n").replace("\\r","\n").replace("\r\n","\n").replace('\r','\n');
                     row.createCell(0).setCellValue(field.attributeName());row.createCell(1).setCellValue(keywords);
-                    row.createCell(2).setCellValue(field.dropDownNature());row.createCell(3).setCellValue(field.fullRule());row.createCell(4);
-                    row.createCell(5).setCellValue(screen.name());
+                    row.createCell(2).setCellValue(field.dropDownNature());row.createCell(3).setCellValue(field.fullRule());row.createCell(4).setCellValue(screen.name());
                     row.forEach(cell->cell.setCellStyle(body));
-                    row.setHeightInPoints(Math.min(409,15*Math.max(1,keywords.split("\n",-1).length)));
-                    byte[] png=null;
-                    try{if(imageBytes<20_000_000)png=RuleImageRenderer.render(field.fullRule());}catch(IOException | RuntimeException e){/* Full rule text remains available. */}
-                    if(png!=null) {
-                        imageBytes+=png.length;
-                        var picture=javax.imageio.ImageIO.read(new ByteArrayInputStream(png));
-                        double scale=Math.min(1,540.0/picture.getHeight());
-                        int height=(int)(picture.getHeight()*scale),width=(int)(picture.getWidth()*scale);
-                        row.setHeightInPoints(Math.max(row.getHeightInPoints(),(float)(height*0.75+2)));
-                        var anchor=wb.getCreationHelper().createClientAnchor();anchor.setCol1(4);anchor.setCol2(4);anchor.setRow1(row.getRowNum());anchor.setRow2(row.getRowNum());
-                        anchor.setDx2(org.apache.poi.util.Units.pixelToEMU(width));anchor.setDy2(org.apache.poi.util.Units.pixelToEMU(height));
-                        anchor.setAnchorType(ClientAnchor.AnchorType.MOVE_AND_RESIZE);
-                        sheet.createDrawingPatriarch().createPicture(anchor,wb.addPicture(png,Workbook.PICTURE_TYPE_PNG));
-                    }else row.getCell(4).setCellValue("See Complete Rule");
+                    int lines=Math.max(keywords.split("\n",-1).length,field.fullRule().split("\\R",-1).length);
+                    row.setHeightInPoints(Math.min(409,15*Math.max(1,lines)));
                 }
                 sheet.setColumnWidth(0,40*256);sheet.setColumnWidth(1,90*256);sheet.createFreezePane(0,1);
-                sheet.setColumnWidth(2,60*256);sheet.setColumnWidth(3,100*256);sheet.setColumnWidth(4,122*256);
-                sheet.setColumnWidth(5,40*256);
-                sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0,Math.max(0,rowNumber-1),0,5));
+                sheet.setColumnWidth(2,60*256);sheet.setColumnWidth(3,100*256);sheet.setColumnWidth(4,40*256);
+                sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0,Math.max(0,rowNumber-1),0,4));
                 // Retain the full lookup name if Excel required a shortened or sanitized tab name.
                 var comment=sheet.createDrawingPatriarch().createCellComment(wb.getCreationHelper().createClientAnchor());
                 comment.setString(wb.getCreationHelper().createRichTextString("Screen: "+screen.name()));header.getCell(0).setCellComment(comment);

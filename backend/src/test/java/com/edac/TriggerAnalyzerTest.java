@@ -9,20 +9,20 @@ import org.junit.jupiter.api.Test;
 class TriggerAnalyzerTest {
     @Test void extractsUniqueSourceFieldsAndRemovesBraceBlocks() {
         assertThat(TriggerAnalyzer.extract("{ &ignored = hidden_id } &a = portfolio_id\n&b=op_currency_id.code\n&c=portfolio_id\n&d=123\n&e=12.5"))
-            .isEqualTo("portfolio_id\nop_currency_id");
+            .isEqualTo("portfolio_id\nop_currency_id.code");
         assertThat(TriggerAnalyzer.extract("{&a=removed_id}" )).isEmpty();
     }
     @Test void extractsFieldsFromConditionalFunctionExpression() {
         assertThat(TriggerAnalyzer.extract("IF(protfolio_id <> NULL AND op_currency_id <> NULL, GET_OBJECT(\"deposit\", depoit_id.code),ud_spread","ud_spread"))
-            .isEqualTo("protfolio_id\nop_currency_id\ndepoit_id\nud_spread");
+            .isEqualTo("protfolio_id\nop_currency_id\ndepoit_id.code\nud_spread");
     }
     @Test void deduplicatesDottedFieldsAcrossConditionAndResult() {
         assertThat(TriggerAnalyzer.extract("IF(portfolio_id <> NULL AND op_currency_id <> NULL AND deposit_id.ud_origional_load_purpose <> 0, deposit_id.ud_origional_load_purpose)"))
-            .isEqualTo("portfolio_id\nop_currency_id\ndeposit_id");
+            .isEqualTo("portfolio_id\nop_currency_id\ndeposit_id.ud_origional_load_purpose");
     }
     @Test void acceptsAnyFieldSuffixAndPreservesFullDottedPaths() {
         assertThat(TriggerAnalyzer.extract("ud_spread portfolio_identity 123 12.5 NULL portfolio_id.code.description + portfolio_id.code.description + op_currency_id"))
-            .isEqualTo("ud_spread\nportfolio_identity\nportfolio_id\nop_currency_id");
+            .isEqualTo("ud_spread\nportfolio_identity\nportfolio_id.code.description\nop_currency_id");
         assertThat(TriggerAnalyzer.extract("")).isEmpty();
     }
     @Test void extractsTenorDateAndCalendarFieldsFromNestedFunctions() {
@@ -35,7 +35,7 @@ class TriggerAnalyzerTest {
                 NEXT_BUSINESSDATE(DATEADD(value_d,YEAR,ud_tenor_term_e),1,op_currency_id.calendar_id),
                 DATEADD(value_d,YEAR,ud_tenor_term_e)))
             """;
-        assertThat(TriggerAnalyzer.extract(script)).isEqualTo("ud_tenor_code_e\nvalue_d\nud_tenor_term_e\nop_currency_id\nYEAR");
+        assertThat(TriggerAnalyzer.extract(script)).isEqualTo("ud_tenor_code_e\nvalue_d\nud_tenor_term_e\nop_currency_id.calendar_id");
     }
     @Test void ignoresQuotedStringsNumbersAndConstantsAndDeduplicatesCaseInsensitively() {
         assertThat(TriggerAnalyzer.extract("IF (amount > 1.2e-3 AND flag = TRUE, CUSTOM_FUNCTION('don''t use hidden_field', \"hidden_id\", currency_code), AMOUNT)"))
@@ -44,14 +44,14 @@ class TriggerAnalyzerTest {
         assertThat(TriggerAnalyzer.extract("DATEADD(value_d, month, 1)")).isEqualTo("value_d\nmonth");
     }
     @Test void normalizesWhitespaceInDottedPaths() {
-        assertThat(TriggerAnalyzer.extract("portfolio_id . code + portfolio_id.\ncode")).isEqualTo("portfolio_id");
+        assertThat(TriggerAnalyzer.extract("portfolio_id . code + portfolio_id.\ncode")).isEqualTo("portfolio_id.code");
     }
     @Test void extractsRequestedArgumentsAndSingleValueRules() {
         assertThat(TriggerAnalyzer.extract("IS_BUSINESSDATE(DATEADD(value_d,YEAR,ud_tenor_term_e),op_currency_id.calendar_id)"))
-            .isEqualTo("value_d\nYEAR\nud_tenor_term_e\nop_currency_id");
+            .isEqualTo("value_d\nud_tenor_term_e\nop_currency_id.calendar_id");
         assertThat(TriggerAnalyzer.extract("ud_client_rate_n","ud_client_rate_n")).isEqualTo("ud_client_rate_n");
         assertThat(TriggerAnalyzer.extract("GET_BEST_OBJECT(GET_ENTITY(\"instrument\"), {ignore.this} &portfolio_id=portfolio_id AND &ref_curr_id.code=op_currency_id.code).id"))
-            .isEqualTo("portfolio_id\nop_currency_id");
+            .isEqualTo("portfolio_id\nop_currency_id.code");
         assertThat(TriggerAnalyzer.extract("{commented_field}\n\"quoted_field\"\nIF(real_field <> NULL, GET_ENTITY(\"instrument\"), real_field)"))
             .isEqualTo("real_field");
     }
@@ -63,18 +63,36 @@ class TriggerAnalyzerTest {
     }
     @Test void ignoresAssignmentTargetsAndConstantRightHandSides() {
         assertThat(TriggerAnalyzer.extract("&target=portfolio_id\n&target.code=op_currency_id.code\n&target=123\n&target=\"fixed value\""))
-            .isEqualTo("portfolio_id\nop_currency_id");
-        assertThat(TriggerAnalyzer.extract("target = DATEADD(value_d,YEAR,tenor_e)")).isEqualTo("value_d\nYEAR\ntenor_e");
+            .isEqualTo("portfolio_id\nop_currency_id.code");
+        assertThat(TriggerAnalyzer.extract("target = DATEADD(value_d,YEAR,tenor_e)")).isEqualTo("value_d\ntenor_e");
         assertThat(TriggerAnalyzer.extract("target := nested(source_field)")).isEqualTo("source_field");
         assertThat(TriggerAnalyzer.extract("target = -1.25")).isEmpty();
         assertThat(TriggerAnalyzer.extract("&target {comment {nested} hidden} = DATEADD {ignored}(value_d,YEAR,tenor_e)"))
-            .isEqualTo("value_d\nYEAR\ntenor_e");
+            .isEqualTo("value_d\ntenor_e");
         assertThat(TriggerAnalyzer.extract("left_a <> right_a AND left_b >= right_b AND left_c <= right_c AND left_d == right_d"))
             .isEqualTo("left_a\nright_a\nleft_b\nright_b\nleft_c\nright_c\nleft_d\nright_d");
     }
-    @Test void keepsActualAndEscapedLineBreaksFromMergingKeywords() {
-        assertThat(TriggerAnalyzer.extract("first_field\nsecond_field\r\nthird_field\\nfourth_field\\r\\nfifth_field"))
+    @Test void flattensActualAndEscapedLineBreaksBeforeExtraction() {
+        assertThat(TriggerAnalyzer.extract("ADD(first_field,\nsecond_field,\r\nthird_field,\\nfourth_field,\\r\\nfifth_field)"))
             .isEqualTo("first_field\nsecond_field\nthird_field\nfourth_field\nfifth_field");
+    }
+    @Test void concatenatesEntireRuleBeforeExtractionAndPreservesOriginalRuleText() {
+        String rule="CALCULATE(instr_id,quantity_n,ud_client_rate_n,\nvalue_d,expiration_d,DATEDIFF(value_d,expiration_d,DAY),ud_client_\r\n    rate_n)";
+        var result=TriggerAnalyzer.describe("output_field",rule);
+        assertThat(result.completeCallTrigger()).isEqualTo("instr_id\nquantity_n\nud_client_rate_n\nvalue_d\nexpiration_d");
+        assertThat(result.fullRule()).isEqualTo(rule);
+        assertThat(TriggerAnalyzer.extract("ud_client_ra \r\n  te_n")).isEqualTo("ud_client_rate_n");
+    }
+    @Test void excludesAllUppercaseKeywordsAndRetainsLowercaseAndMixedCaseFields() {
+        assertThat(TriggerAnalyzer.extract("DAY + YEAR + UPPER_FIELD_1 + _UPPER_FIELD + quantity_n + Mixed_Field"))
+            .isEqualTo("quantity_n\nMixed_Field");
+        assertThat(TriggerAnalyzer.extract("UD_CLIENT_RATE_N + ud_client_rate_n")).isEqualTo("ud_client_rate_n");
+    }
+    @Test void retainsEachDistinctFullDottedKeywordIncludingTheRequestedLoanPurposeField() {
+        assertThat(TriggerAnalyzer.extract("IF(deposit_id <> NULL, deposit_id.ud_origional_loan_purpose_e + deposit_id.code + deposit_id.ud_origional_loan_purpose_\ne)"))
+            .isEqualTo("deposit_id\ndeposit_id.ud_origional_loan_purpose_e\ndeposit_id.code");
+        assertThat(TriggerAnalyzer.extract("&target.code = deposit_id.ud_origional_loan_purpose_e"))
+            .isEqualTo("deposit_id.ud_origional_loan_purpose_e");
     }
     @Test void selectsNatureBeforeExtractingAndCombinesFragmentsByRank() throws Exception {
         String url="jdbc:h2:mem:trigger_"+UUID.randomUUID()+";DB_CLOSE_DELAY=-1";
@@ -95,7 +113,7 @@ class TriggerAnalyzerTest {
             var analyzer=new TriggerAnalyzer(factory,readable);
             var fields=analyzer.analyze(profile,"secret","Portfolio Screen");
             assertThat(fields).extracting(TriggerAnalyzer.TriggerField::attributeName,TriggerAnalyzer.TriggerField::completeCallTrigger)
-                .containsExactly(tuple("FIELD_A","first_id\nsecond_id\nFIELD_A"),tuple("FIELD_B","chosen_two_id"),tuple("FIELD_C","chosen_one_id"));
+                .containsExactly(tuple("FIELD_A","first_id\nsecond_id"),tuple("FIELD_B","chosen_two_id"),tuple("FIELD_C","chosen_one_id"));
             assertThat(fields).extracting(TriggerAnalyzer.TriggerField::screenName).containsOnly("Portfolio Screen");
             assertThat(fields.get(0).fullRule()).isEqualTo("&a=first_id\n&b=second_id + FIELD_A\n&c=first_id\n");
             assertThat(analyzer.analyze(profile,"secret","Empty Screen")).isEmpty();

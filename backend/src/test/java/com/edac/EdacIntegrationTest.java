@@ -118,16 +118,17 @@ class EdacIntegrationTest {
                 assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("TAP Field Name");
                 assertThat(sheet.getRow(0).getCell(1).getStringCellValue()).isEqualTo("Complete Call Trigger");
                 assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("portfolio_id");
-                assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("source_id\nsource");
+                assertThat(sheet.getRow(1).getCell(1).getStringCellValue()).isEqualTo("source_id\nsource.code");
                 assertThat(sheet.getRow(0).getCell(2).getStringCellValue()).isEqualTo("Drop Down Nature");
                 assertThat(sheet.getRow(0).getCell(3).getStringCellValue()).isEqualTo("Complete Rule");
                 assertThat(sheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("IF(source_id <> NULL, source.code, source_id)");
                 assertThat(sheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("ENUM_LIST(0,1,4,6)");
                 assertThat(sheet.getRow(3).getCell(1).getStringCellValue()).isEqualTo("one\ntwo\nthree");
                 assertThat(sheet.getRow(3).getCell(1).getCellStyle().getWrapText()).isTrue();
-                assertThat(sheet.getRow(0).getCell(5).getStringCellValue()).isEqualTo("Screen Name");
-                assertThat(rows).extracting(TriggerService.ScreenEntry::name).contains(sheet.getRow(1).getCell(5).getStringCellValue());
-                assertThat(((org.apache.poi.xssf.usermodel.XSSFDrawing)sheet.getDrawingPatriarch()).getShapes().stream().filter(shape->shape instanceof org.apache.poi.xssf.usermodel.XSSFPicture).count()).isEqualTo(2);
+                assertThat(sheet.getRow(0).getLastCellNum()).isEqualTo((short)5);
+                assertThat(sheet.getRow(0).getCell(4).getStringCellValue()).isEqualTo("Screen Name");
+                assertThat(rows).extracting(TriggerService.ScreenEntry::name).contains(sheet.getRow(1).getCell(4).getStringCellValue());
+                assertThat(wb.getAllPictures()).isEmpty();
             }
         }
         mvc.perform(post(path+"/workbook").contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());

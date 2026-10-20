@@ -73,7 +73,7 @@ public class TriggerAnalyzer {
         return extract(definition,null);
     }
     static String extract(String definition,String attribute) {
-        String script=withoutComments(definition);
+        String script=singleLine(withoutComments(definition));
         var matcher=SOURCE_TOKEN.matcher(script);
         Map<String,String> fields=new LinkedHashMap<>();
         while(matcher.find()) {
@@ -86,14 +86,13 @@ public class TriggerAnalyzer {
             int previous=matcher.start()-1;while(previous>=0 && Character.isWhitespace(script.charAt(previous)))previous--;
             if(previous>=0 && script.charAt(previous)=='.')continue; // e.g. GET_OBJECT(...).id
             if(next<script.length() && script.charAt(next)=='(' && !field.contains("."))continue;
-            field=field.split("\\.",2)[0];
-            if(CONSTANTS.contains(field.toUpperCase(Locale.ROOT)))continue;
+            if(CONSTANTS.contains(field.toUpperCase(Locale.ROOT)) || field.equals(field.toUpperCase(Locale.ROOT)))continue;
             fields.putIfAbsent(field.toLowerCase(Locale.ROOT),field);
         }
         return String.join("\n",fields.values());
     }
     static TriggerField describe(String attribute,String definition) {
-        String script=withoutComments(definition);
+        String script=singleLine(withoutComments(definition));
         boolean dropdown=false;var matcher=SOURCE_TOKEN.matcher(script);
         while(matcher.find()) {
             if(!"ENUM_LIST".equalsIgnoreCase(matcher.group("field")))continue;
@@ -101,6 +100,9 @@ public class TriggerAnalyzer {
             if(next<script.length() && script.charAt(next)=='('){dropdown=true;break;}
         }
         return new TriggerField(attribute,extract(definition),dropdown?definition:"",definition);
+    }
+    private static String singleLine(String rule) {
+        return rule.replace("\\r\\n","\n").replace("\\n","\n").replace("\\r","\n").replaceAll("[\\t ]*\\R[\\t ]*","");
     }
     private static String withoutComments(String definition) {
         char[] text=definition.toCharArray();int depth=0;char quote=0;
