@@ -88,16 +88,19 @@ public class TriggerService {
                 var sheet=wb.createSheet(sheetName(screen.name(),used));
                 var header=sheet.createRow(0);header.createCell(0).setCellValue("TAP Field Name");header.createCell(1).setCellValue("Complete Call Trigger");
                 header.createCell(2).setCellValue("Drop Down Nature");header.createCell(3).setCellValue("Complete Rule");header.createCell(4).setCellValue("Rule Image");
+                header.createCell(5).setCellValue("Table Name");
                 header.forEach(cell->cell.setCellStyle(heading));
                 int rowNumber=1;
                 for(var field:fields) {
                     for(String value:List.of(field.completeCallTrigger(),field.dropDownNature(),field.fullRule()))
                         if(value.length()>32767)throw new IllegalArgumentException("Rule output exceeds Excel's cell limit for "+screen.name()+" / "+field.attributeName());
                     var row=sheet.createRow(rowNumber++);
-                    row.createCell(0).setCellValue(field.attributeName());row.createCell(1).setCellValue(field.completeCallTrigger());
+                    String keywords=field.completeCallTrigger().replace("\\r\\n","\n").replace("\\n","\n").replace("\\r","\n").replace("\r\n","\n").replace('\r','\n');
+                    row.createCell(0).setCellValue(field.attributeName());row.createCell(1).setCellValue(keywords);
                     row.createCell(2).setCellValue(field.dropDownNature());row.createCell(3).setCellValue(field.fullRule());row.createCell(4);
+                    row.createCell(5).setCellValue(field.tableName());
                     row.forEach(cell->cell.setCellStyle(body));
-                    row.setHeightInPoints(Math.min(409,15*Math.max(1,field.completeCallTrigger().split("\n",-1).length)));
+                    row.setHeightInPoints(Math.min(409,15*Math.max(1,keywords.split("\n",-1).length)));
                     byte[] png=null;
                     try{if(imageBytes<20_000_000)png=RuleImageRenderer.render(field.fullRule());}catch(IOException | RuntimeException e){/* Full rule text remains available. */}
                     if(png!=null) {
@@ -114,7 +117,8 @@ public class TriggerService {
                 }
                 sheet.setColumnWidth(0,40*256);sheet.setColumnWidth(1,90*256);sheet.createFreezePane(0,1);
                 sheet.setColumnWidth(2,60*256);sheet.setColumnWidth(3,100*256);sheet.setColumnWidth(4,122*256);
-                sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0,Math.max(0,rowNumber-1),0,4));
+                sheet.setColumnWidth(5,40*256);
+                sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0,Math.max(0,rowNumber-1),0,5));
                 // Retain the full lookup name if Excel required a shortened or sanitized tab name.
                 var comment=sheet.createDrawingPatriarch().createCellComment(wb.getCreationHelper().createClientAnchor());
                 comment.setString(wb.getCreationHelper().createRichTextString("Screen: "+screen.name()));header.getCell(0).setCellComment(comment);

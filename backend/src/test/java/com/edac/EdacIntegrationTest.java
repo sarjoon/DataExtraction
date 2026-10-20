@@ -36,7 +36,48 @@ class EdacIntegrationTest {
     @Autowired RegistryService registry;
     @MockitoBean OracleSource oracle;
     @MockitoBean TriggerAnalyzer triggers;
+    @MockitoBean ScreenFieldSource screenFieldsSource;
     @Autowired TriggerService triggerService;
+    @Test void configuresReadableFieldsFromScreenResultsAndPersistsDeselection() throws Exception {
+        long id=connection(),other=connection();triggerService.append(id,"Bond",List.of("Screen One"),"MANUAL");
+        long screenId=triggerService.screens(id).get(0).id();String base="/api/connections/"+id+"/screens";
+        when(screenFieldsSource.discover(argThat(p->p.id()==id),eq("test-secret"),eq("Screen One"))).thenReturn(List.of(
+            new ReadableFieldService.FieldName("INSTRUMENT","PORTFOLIO_ID"),new ReadableFieldService.FieldName("ACCOUNT","VALUE_D"),new ReadableFieldService.FieldName(null,"UNKNOWN_FIELD")));
+        String saved="{\"fields\":[{\"tableName\":\"INSTRUMENT\",\"fieldName\":\"PORTFOLIO_ID\"},{\"tableName\":\"ACCOUNT\",\"fieldName\":\"VALUE_D\"},{\"tableName\":\"OTHER\",\"fieldName\":\"KEEP_ME\"}]}";
+        mvc.perform(post(base+"/readable-fields").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(saved)).andExpect(status().isOk());
+        String path=base+"/"+screenId+"/readable-fields";
+        mvc.perform(get(path)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3))
+            .andExpect(jsonPath("$[0].configured").value(true)).andExpect(jsonPath("$[2].selectable").value(false));
+        String selected="{\"fields\":[{\"tableName\":\"INSTRUMENT\",\"fieldName\":\"PORTFOLIO_ID\"}]}";
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(selected)).andExpect(status().isOk());
+        mvc.perform(get(path)).andExpect(jsonPath("$[0].configured").value(true)).andExpect(jsonPath("$[1].configured").value(false));
+        mvc.perform(get(base+"/readable-fields")).andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"fields\":[{\"tableName\":\"OTHER\",\"fieldName\":\"NOT_FROM_SCREEN\"}]}"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(base+"/readable-fields")).andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(get("/api/connections/"+other+"/screens/"+screenId+"/readable-fields")).andExpect(status().isNotFound());
+        mvc.perform(post("/api/connections/"+other+"/screens/"+screenId+"/readable-fields").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(selected)).andExpect(status().isNotFound());
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(selected)).andExpect(status().isForbidden());
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"fields\":[]}")).andExpect(status().isOk());
+        mvc.perform(get(base+"/readable-fields")).andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].fieldName").value("KEEP_ME"));
+    }
+    @Test void managesReadableFieldsWithAtomicUploadsAndConnectionIsolation() throws Exception {
+        long id=connection(),other=connection();String path="/api/connections/"+id+"/screens/readable-fields";
+        var upload=new MockMultipartFile("file","readable.csv","text/csv","Table Name,Field Name\ninstrument,portfolio_id\nINSTRUMENT,PORTFOLIO_ID\nACCOUNT,OP_CURRENCY_ID".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart(path+"/import").file(upload).with(csrf())).andExpect(status().isOk()).andExpect(jsonPath("$.added").value(2)).andExpect(jsonPath("$.skipped").value(1));
+        var response=mvc.perform(get(path)).andExpect(jsonPath("$.length()").value(2)).andReturn();
+        long fieldId=json.readTree(response.getResponse().getContentAsString()).get(0).get("id").asLong();
+        mvc.perform(get("/api/connections/"+other+"/screens/readable-fields")).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(post("/api/connections/"+other+"/screens/readable-fields/"+fieldId+"/remove").with(csrf())).andExpect(status().isNotFound());
+        var invalid=new MockMultipartFile("file","bad.csv","text/csv","Table Name,Field Name\nNEW_TABLE,NEW_FIELD\nBAD-TABLE,FIELD".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart(path+"/import").file(invalid).with(csrf())).andExpect(status().isBadRequest());
+        mvc.perform(get(path)).andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"fields\":[{\"tableName\":\"INSTRUMENT\",\"fieldName\":\"VALUE_D\"}]}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.added").value(1));
+        mvc.perform(post(path+"/"+fieldId+"/remove").with(csrf())).andExpect(status().isOk());
+        mvc.perform(get(path)).andExpect(jsonPath("$.length()").value(2));
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{\"fields\":[]}")).andExpect(status().isForbidden());
+    }
     @Test void uploadsInstrumentScreenPairsWithoutAnInstrumentParameter() throws Exception {
         long id=connection();String path="/api/connections/"+id+"/screens";
         var upload=new MockMultipartFile("file","screens.csv","text/csv","Instrument,Screen Name\nBond,Portfolio Screen\nBond,Account Screen\nEquity,Portfolio Screen\nBond,Portfolio Screen".getBytes(StandardCharsets.UTF_8));
@@ -61,7 +102,8 @@ class EdacIntegrationTest {
         assertThat(triggerService.screens(id)).hasSize(3);
         when(triggers.analyze(argThat(p->p.id()==id),eq("test-secret"),anyString())).thenReturn(List.of(
             TriggerAnalyzer.describe("portfolio_id","IF(source_id <> NULL, source.code, source_id)"),
-            TriggerAnalyzer.describe("nature_e","ENUM_LIST(0,1,4,6)")));
+            TriggerAnalyzer.describe("nature_e","ENUM_LIST(0,1,4,6)"),
+            new TriggerAnalyzer.TriggerField("NEWLINES","one\\ntwo\r\nthree")));
         var body=json.writeValueAsString(new TriggerController.ScreenSelection(rows.stream().map(TriggerService.ScreenEntry::id).toList()));
         var response=mvc.perform(post(path+"/workbook").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isOk()).andExpect(header().string("Content-Disposition","attachment; filename=Complete_Call_Trigger.xlsx")).andReturn();
@@ -78,6 +120,9 @@ class EdacIntegrationTest {
                 assertThat(sheet.getRow(0).getCell(3).getStringCellValue()).isEqualTo("Complete Rule");
                 assertThat(sheet.getRow(1).getCell(3).getStringCellValue()).isEqualTo("IF(source_id <> NULL, source.code, source_id)");
                 assertThat(sheet.getRow(2).getCell(2).getStringCellValue()).isEqualTo("ENUM_LIST(0,1,4,6)");
+                assertThat(sheet.getRow(3).getCell(1).getStringCellValue()).isEqualTo("one\ntwo\nthree");
+                assertThat(sheet.getRow(3).getCell(1).getCellStyle().getWrapText()).isTrue();
+                assertThat(sheet.getRow(0).getCell(5).getStringCellValue()).isEqualTo("Table Name");
                 assertThat(((org.apache.poi.xssf.usermodel.XSSFDrawing)sheet.getDrawingPatriarch()).getShapes().stream().filter(shape->shape instanceof org.apache.poi.xssf.usermodel.XSSFPicture).count()).isEqualTo(2);
             }
         }
@@ -106,7 +151,7 @@ class EdacIntegrationTest {
         return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
     }
     @Test void usesH2ConfigurationAndSavedCredentialsForOracle() throws Exception {
-        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("6"));
+        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("7"));
         long id=connection();
         when(oracle.test(any(),eq("test-secret"))).thenReturn(new Models.TestResult(true,"Oracle test",List.of()));
         when(oracle.discover(any(),eq("test-secret"))).thenReturn(List.of(new Models.TableName("APP","CUSTOMER"),new Models.TableName("APP","ACCOUNT")));
