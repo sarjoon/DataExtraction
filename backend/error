@@ -29,3 +29,8 @@ ud_tenor_code_e,ud_tenor_term_e,op_currency_id,value_d
 
 
 ud_client_rate_n
+
+
+select  distinct da.sqlname_c from script_definition sd
+inner join dict_attribute da on da.dict_id =sd . attribute_dict_id
+where sd.object_id in (select dict_id from dict_screen where name='UOB_WSCA_LOAN_DRAWDOWN')
