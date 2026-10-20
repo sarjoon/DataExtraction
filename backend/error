@@ -34,3 +34,8 @@ ud_client_rate_n
 select  distinct da.sqlname_c from script_definition sd
 inner join dict_attribute da on da.dict_id =sd . attribute_dict_id
 where sd.object_id in (select dict_id from dict_screen where name='UOB_WSCA_LOAN_DRAWDOWN')
+
+IF(instr_id.ref_curr_id.code IN("IDR", "JPY"), ROUND((quantity_n * ud_client_rate_n * DATEDIFF(value_d,expiration_d,DAY))/
+STRNUM(NOTEPAD("currency",instr_id.ref_curr_id.code,SYSDATE(),,"UOB_INTEREST_BASIS").title_c), 1, 2), ROUND((quantity_n * ud_client_
+rate_n * DATEDIFF(value_d,expiration_d,DAY))/
+STRNUM(NOTEPAD("currency",instr_id.ref_curr_id.code,SYSDATE(),,"UOB_INTEREST_BASIS").title_c), 0.01, 2))
