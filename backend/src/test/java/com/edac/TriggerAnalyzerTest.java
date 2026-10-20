@@ -81,26 +81,25 @@ class TriggerAnalyzerTest {
         var factory=mock(OracleConnectionFactory.class);
         var readable=mock(ReadableFieldService.class);
         when(readable.names(1)).thenReturn(java.util.Set.of(
-            new ReadableFieldService.FieldName("MAIN","FIELD_A"),new ReadableFieldService.FieldName("MAIN","FIELD_B"),new ReadableFieldService.FieldName("MAIN","FIELD_C")));
+            new ReadableFieldService.FieldName("Portfolio Screen","FIELD_A"),new ReadableFieldService.FieldName("Portfolio Screen","FIELD_B"),new ReadableFieldService.FieldName("Portfolio Screen","FIELD_C")));
         var profile=new Models.ConnectionProfile(1,"test","ORACLE","host",1521,"SERVICE_NAME","service","ignored","sa","PUBLIC",true);
         when(factory.open(profile,"secret")).thenAnswer(call->DriverManager.getConnection(url));
         try(var fixture=DriverManager.getConnection(url);var sql=fixture.createStatement()) {
             sql.execute("CREATE TABLE dict_screen(dict_id INT,name VARCHAR)");
-            sql.execute("CREATE TABLE dict_entity(dict_id INT,sqlname_c VARCHAR)");
-            sql.execute("INSERT INTO dict_entity VALUES(1,'MAIN'),(2,'HIDDEN')");
-            sql.execute("CREATE TABLE dict_attribute(dict_id INT,sqlname_c VARCHAR,entity_dict_id INT)");
+            sql.execute("CREATE TABLE dict_attribute(dict_id INT,sqlname_c VARCHAR)");
             sql.execute("CREATE TABLE script_definition(object_id INT,attribute_dict_id INT,nature_e INT,rank_n INT,definition_c CLOB)");
             sql.execute("INSERT INTO dict_screen VALUES(1,'Portfolio Screen'),(2,'Other Screen'),(3,'Empty Screen')");
-            sql.execute("INSERT INTO dict_attribute VALUES(1,'FIELD_A',1),(2,'FIELD_B',1),(3,'FIELD_C',1),(4,'FIELD_D',1),(5,'FIELD_A',2)");
+            sql.execute("INSERT INTO dict_attribute VALUES(1,'FIELD_A'),(2,'FIELD_B'),(3,'FIELD_C'),(4,'FIELD_D'),(5,'NOT_CONFIGURED')");
             sql.execute("INSERT INTO script_definition VALUES (1,1,1,1,'&a=wrong_one_id'),(1,1,2,1,'&a=wrong_two_id'),(1,1,10,2,'&b=second_id + FIELD_A'),(1,1,10,1,'&a=first_id'),(1,1,10,3,'&c=first_id'),(1,2,1,1,'&a=wrong_id'),(1,2,2,1,'&a=chosen_two_id'),(1,3,1,1,'&a=chosen_one_id'),(1,4,3,1,'&a=ignored_id'),(2,1,10,1,'&a=other_screen_id')");
             sql.execute("INSERT INTO script_definition VALUES(1,5,10,1,'hidden_table_field')");
             var analyzer=new TriggerAnalyzer(factory,readable);
             var fields=analyzer.analyze(profile,"secret","Portfolio Screen");
             assertThat(fields).extracting(TriggerAnalyzer.TriggerField::attributeName,TriggerAnalyzer.TriggerField::completeCallTrigger)
                 .containsExactly(tuple("FIELD_A","first_id\nsecond_id\nFIELD_A"),tuple("FIELD_B","chosen_two_id"),tuple("FIELD_C","chosen_one_id"));
-            assertThat(fields).extracting(TriggerAnalyzer.TriggerField::tableName).containsOnly("MAIN");
+            assertThat(fields).extracting(TriggerAnalyzer.TriggerField::screenName).containsOnly("Portfolio Screen");
             assertThat(fields.get(0).fullRule()).isEqualTo("&a=first_id\n&b=second_id + FIELD_A\n&c=first_id\n");
             assertThat(analyzer.analyze(profile,"secret","Empty Screen")).isEmpty();
+            assertThat(analyzer.analyze(profile,"secret","Other Screen")).isEmpty();
             assertThatThrownBy(()->analyzer.analyze(profile,"secret","Missing")).hasMessageContaining("Screen not found");
             when(readable.names(1)).thenReturn(java.util.Set.of());
             assertThatThrownBy(()->analyzer.analyze(profile,"secret","Portfolio Screen")).hasMessageContaining("Configure readable");

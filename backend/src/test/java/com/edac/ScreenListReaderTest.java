@@ -10,15 +10,15 @@ import org.springframework.mock.web.MockMultipartFile;
 class ScreenListReaderTest {
     private final TableListReader reader=new TableListReader();
     @Test void readsReadableFieldHeadersAndRejectsIncompleteRows() throws Exception {
-        var csv=new MockMultipartFile("file","readable.csv","text/csv","FIELD_NAME,TABLE_NAME\nportfolio_id,instrument".getBytes(StandardCharsets.UTF_8));
-        assertThat(reader.readReadableFields(csv)).containsExactly(new ReadableFieldService.FieldName("instrument","portfolio_id"));
-        var bad=new MockMultipartFile("file","bad.csv","text/csv","Table Name,Field Name\ninstrument,".getBytes(StandardCharsets.UTF_8));
-        assertThatThrownBy(()->reader.readReadableFields(bad)).hasMessageContaining("Missing table or field");
+        var csv=new MockMultipartFile("file","readable.csv","text/csv","FIELD_NAME,SCREEN_NAME\nportfolio_id,Portfolio Screen".getBytes(StandardCharsets.UTF_8));
+        assertThat(reader.readReadableFields(csv)).containsExactly(new ReadableFieldService.FieldName("Portfolio Screen","portfolio_id"));
+        var bad=new MockMultipartFile("file","bad.csv","text/csv","Screen Name,Field Name\nPortfolio Screen,".getBytes(StandardCharsets.UTF_8));
+        assertThatThrownBy(()->reader.readReadableFields(bad)).hasMessageContaining("Missing screen or field");
         try(var wb=new XSSFWorkbook();var output=new ByteArrayOutputStream()) {
-            var sheet=wb.createSheet("Fields");var row=sheet.createRow(0);row.createCell(0).setCellValue("Table Name");row.createCell(1).setCellValue("Field Name");
-            row=sheet.createRow(1);row.createCell(0).setCellValue("INSTRUMENT");row.createCell(1).setCellValue("VALUE_D");wb.write(output);
+            var sheet=wb.createSheet("Fields");var row=sheet.createRow(0);row.createCell(0).setCellValue("Screen Name");row.createCell(1).setCellValue("Field Name");
+            row=sheet.createRow(1);row.createCell(0).setCellValue("Portfolio Screen");row.createCell(1).setCellValue("VALUE_D");wb.write(output);
             assertThat(reader.readReadableFields(new MockMultipartFile("file","fields.xlsx","application/octet-stream",output.toByteArray())))
-                .containsExactly(new ReadableFieldService.FieldName("INSTRUMENT","VALUE_D"));
+                .containsExactly(new ReadableFieldService.FieldName("Portfolio Screen","VALUE_D"));
         }
     }
     @Test void readsMultipleInstrumentsFromCsvAndRejectsIncompleteRows() throws Exception {

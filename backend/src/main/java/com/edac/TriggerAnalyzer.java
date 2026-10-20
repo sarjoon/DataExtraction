@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TriggerAnalyzer {
-    public record TriggerField(String attributeName,String completeCallTrigger,String dropDownNature,String fullRule,String tableName) {
+    public record TriggerField(String attributeName,String completeCallTrigger,String dropDownNature,String fullRule,String screenName) {
         public TriggerField(String attributeName,String completeCallTrigger){this(attributeName,completeCallTrigger,"","","");}
         public TriggerField(String attributeName,String completeCallTrigger,String dropDownNature,String fullRule){this(attributeName,completeCallTrigger,dropDownNature,fullRule,"");}
     }
@@ -24,11 +24,10 @@ public class TriggerAnalyzer {
     public List<TriggerField> analyze(Models.ConnectionProfile profile,String password,String screen) {
         String schema=RegistryService.identifier(profile.schema());
         var allowed=readable.names(profile.id());
-        if(allowed.isEmpty())throw new IllegalArgumentException("Configure readable Table Name and Field Name pairs for this connection before generating a report.");
+        if(allowed.isEmpty())throw new IllegalArgumentException("Configure readable Screen Name and Field Name pairs for this connection before generating a report.");
         // Fetch script fragments once, retaining the original nature priority and rank order.
-        String sql="SELECT da.sqlname_c, sd.nature_e, sd.definition_c, de.sqlname_c FROM "+schema+".script_definition sd "
+        String sql="SELECT da.sqlname_c, sd.nature_e, sd.definition_c FROM "+schema+".script_definition sd "
             +"JOIN "+schema+".dict_attribute da ON da.dict_id=sd.attribute_dict_id "
-            +"LEFT JOIN "+schema+".dict_entity de ON de.dict_id=da.entity_dict_id "
             +"WHERE sd.object_id IN (SELECT dict_id FROM "+schema+".dict_screen WHERE name=?) "
             +"ORDER BY da.sqlname_c, sd.nature_e, sd.rank_n";
         try(var connection=connections.open(profile,password)) {
@@ -45,10 +44,9 @@ public class TriggerAnalyzer {
                     while(rows.next()) {
                         if(++count>50000)throw new IllegalArgumentException("Screen exceeds 50,000 script fragments: "+screen);
                         String attribute=rows.getString(1);if(attribute==null)continue;
-                        String table=rows.getString(4);if(table==null)continue;
-                        var key=new ReadableFieldService.FieldName(table.toUpperCase(Locale.ROOT),attribute.toUpperCase(Locale.ROOT));
+                        var key=new ReadableFieldService.FieldName(screen,attribute.toUpperCase(Locale.ROOT));
                         if(!allowed.contains(key))continue;
-                        var byNature=definitions.computeIfAbsent(new ReadableFieldService.FieldName(table,attribute),ignored->new HashMap<>());
+                        var byNature=definitions.computeIfAbsent(new ReadableFieldService.FieldName(screen,attribute),ignored->new HashMap<>());
                         int nature=rows.getInt(2);if(rows.wasNull())continue;
                         var text=byNature.computeIfAbsent(nature,ignored->new StringBuilder());
                         String fragment=rows.getString(3);
@@ -64,7 +62,7 @@ public class TriggerAnalyzer {
                     var definition=byNature.get(nature);
                     if(definition!=null && !definition.isEmpty()) {
                         var resultField=describe(field.fieldName(),definition.toString());
-                        result.add(new TriggerField(resultField.attributeName(),resultField.completeCallTrigger(),resultField.dropDownNature(),resultField.fullRule(),field.tableName()));
+                        result.add(new TriggerField(resultField.attributeName(),resultField.completeCallTrigger(),resultField.dropDownNature(),resultField.fullRule(),field.screenName()));
                     }
                 });
                 return result;

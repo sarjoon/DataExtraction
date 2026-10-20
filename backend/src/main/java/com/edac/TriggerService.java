@@ -88,7 +88,7 @@ public class TriggerService {
                 var sheet=wb.createSheet(sheetName(screen.name(),used));
                 var header=sheet.createRow(0);header.createCell(0).setCellValue("TAP Field Name");header.createCell(1).setCellValue("Complete Call Trigger");
                 header.createCell(2).setCellValue("Drop Down Nature");header.createCell(3).setCellValue("Complete Rule");header.createCell(4).setCellValue("Rule Image");
-                header.createCell(5).setCellValue("Table Name");
+                header.createCell(5).setCellValue("Screen Name");
                 header.forEach(cell->cell.setCellStyle(heading));
                 int rowNumber=1;
                 for(var field:fields) {
@@ -98,7 +98,7 @@ public class TriggerService {
                     String keywords=field.completeCallTrigger().replace("\\r\\n","\n").replace("\\n","\n").replace("\\r","\n").replace("\r\n","\n").replace('\r','\n');
                     row.createCell(0).setCellValue(field.attributeName());row.createCell(1).setCellValue(keywords);
                     row.createCell(2).setCellValue(field.dropDownNature());row.createCell(3).setCellValue(field.fullRule());row.createCell(4);
-                    row.createCell(5).setCellValue(field.tableName());
+                    row.createCell(5).setCellValue(screen.name());
                     row.forEach(cell->cell.setCellStyle(body));
                     row.setHeightInPoints(Math.min(409,15*Math.max(1,keywords.split("\n",-1).length)));
                     byte[] png=null;

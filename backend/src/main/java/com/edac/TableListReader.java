@@ -11,23 +11,23 @@ import org.springframework.web.multipart.MultipartFile;
 @Component
 public class TableListReader {
     public List<ReadableFieldService.FieldName> readReadableFields(MultipartFile file) throws IOException {
-        var rows=readRows(file,true);int header=-1,table=-1,field=-1;
+        var rows=readRows(file,true);int header=-1,screen=-1,field=-1;
         for(int r=0;r<Math.min(5,rows.size());r++) {
-            int candidateTable=-1,candidateField=-1;
+            int candidateScreen=-1,candidateField=-1;
             for(int c=0;c<rows.get(r).size();c++) {
                 String label=normalize(rows.get(r).get(c));
-                if(label.equals("tablename"))candidateTable=c;
+                if(label.equals("screenname"))candidateScreen=c;
                 if(Set.of("fieldname","columnname","sqlnamec").contains(label))candidateField=c;
             }
-            if(candidateTable>=0 && candidateField>=0){header=r;table=candidateTable;field=candidateField;break;}
+            if(candidateScreen>=0 && candidateField>=0){header=r;screen=candidateScreen;field=candidateField;break;}
         }
-        if(header<0)throw new IllegalArgumentException("Include Table Name and Field Name headers in the readable-field upload.");
+        if(header<0)throw new IllegalArgumentException("Include Screen Name and Field Name headers in the readable-field upload.");
         var result=new ArrayList<ReadableFieldService.FieldName>();
         for(int r=header+1;r<rows.size();r++) {
             var row=rows.get(r);if(row.stream().allMatch(String::isBlank))continue;
-            if(row.size()<=Math.max(table,field) || row.get(table).isBlank() || row.get(field).isBlank())
-                throw new IllegalArgumentException("Missing table or field name at row "+(r+1)+".");
-            result.add(new ReadableFieldService.FieldName(row.get(table),row.get(field)));
+            if(row.size()<=Math.max(screen,field) || row.get(screen).isBlank() || row.get(field).isBlank())
+                throw new IllegalArgumentException("Missing screen or field name at row "+(r+1)+".");
+            result.add(new ReadableFieldService.FieldName(row.get(screen),row.get(field)));
         }
         return result;
     }

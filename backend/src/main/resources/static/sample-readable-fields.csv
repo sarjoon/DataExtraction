@@ -1,4 +1,4 @@
-Table Name,Field Name
-INSTRUMENT,PORTFOLIO_ID
-INSTRUMENT,UD_CLIENT_RATE_N
-ACCOUNT,OP_CURRENCY_ID
+Screen Name,Field Name
+Portfolio Screen,PORTFOLIO_ID
+Portfolio Screen,UD_CLIENT_RATE_N
+Account Screen,OP_CURRENCY_ID

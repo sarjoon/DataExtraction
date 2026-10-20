@@ -23,7 +23,7 @@ public class TriggerController {
     @GetMapping("/readable-fields") public List<ReadableFieldService.Entry> readableFields(@PathVariable long connectionId){return readable.list(connectionId);}
     @PostMapping("/readable-fields") public Models.AppendResult addReadable(@PathVariable long connectionId,@Valid @RequestBody ReadableFields input){return readable.append(connectionId,input.fields());}
     @PostMapping("/readable-fields/import") public Models.AppendResult uploadReadable(@PathVariable long connectionId,@RequestParam("file") MultipartFile file) throws IOException {
-        if(file.getOriginalFilename()==null || !file.getOriginalFilename().toLowerCase(java.util.Locale.ROOT).endsWith(".csv"))throw new IllegalArgumentException("Upload a CSV with Table Name and Field Name headers.");
+        if(file.getOriginalFilename()==null || !file.getOriginalFilename().toLowerCase(java.util.Locale.ROOT).endsWith(".csv"))throw new IllegalArgumentException("Upload a CSV with Screen Name and Field Name headers.");
         return readable.append(connectionId,reader.readReadableFields(file));
     }
     @GetMapping("/{screenId}/readable-fields") public List<ReadableFieldService.ScreenField> screenFields(@PathVariable long connectionId,@PathVariable long screenId){return readable.screenFields(connectionId,screenId);}

@@ -11,11 +11,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class ReadableFieldService {
-    public record FieldName(@NotBlank @Size(max=128) String tableName,@NotBlank @Size(max=128) String fieldName) {
-        public static FieldName normalized(String table,String field){return new FieldName(RegistryService.identifier(table),RegistryService.identifier(field));}
+    public record FieldName(@NotBlank @Size(max=256) String screenName,@NotBlank @Size(max=128) String fieldName) {
+        public static FieldName normalized(String screen,String field){
+            if(screen==null || screen.isBlank() || screen.trim().length()>256 || screen.chars().anyMatch(Character::isISOControl))throw new IllegalArgumentException("Screen Name must contain 1 to 256 characters without control characters.");
+            return new FieldName(screen.trim(),RegistryService.identifier(field));
+        }
     }
-    public record Entry(long id,String tableName,String fieldName) {}
-    public record ScreenField(String tableName,String fieldName,boolean selectable,boolean configured) {}
+    public record Entry(long id,String screenName,String fieldName) {}
+    public record ScreenField(String screenName,String fieldName,boolean selectable,boolean configured) {}
     private final RegistryService registry;
     private final JdbcTemplate db;
     private final CredentialCipher cipher;
@@ -26,41 +29,46 @@ public class ReadableFieldService {
     }
     public List<Entry> list(long id) {
         check(id);
-        return db.query("SELECT id,table_name,field_name FROM readable_trigger_field WHERE connection_id=? ORDER BY table_name,field_name",
+        return db.query("SELECT id,screen_name,field_name FROM readable_trigger_field WHERE connection_id=? ORDER BY screen_name,field_name",
             (r,n)->new Entry(r.getLong(1),r.getString(2),r.getString(3)),id);
     }
     public Set<FieldName> names(long id) {
-        var names=new HashSet<FieldName>();list(id).forEach(e->names.add(FieldName.normalized(e.tableName(),e.fieldName())));return names;
+        var names=new HashSet<FieldName>();list(id).forEach(e->names.add(FieldName.normalized(e.screenName(),e.fieldName())));return names;
     }
-    private List<FieldName> sourceFields(long connectionId,long screenId) {
+    private String screenName(long connectionId,long screenId) {
         check(connectionId);
         var screens=db.queryForList("SELECT screen_name FROM screen_registry WHERE connection_id=? AND id=?",String.class,connectionId,screenId);
         if(screens.isEmpty())throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Screen not found for this connection.");
+        return screens.get(0);
+    }
+    private List<FieldName> sourceFields(long connectionId,long screenId) {
+        String screen=screenName(connectionId,screenId);
         String password=cipher.decrypt(db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,connectionId));
-        return source.discover(registry.connection(connectionId),password,screens.get(0));
+        return source.discover(registry.connection(connectionId),password,screen);
     }
     private static FieldName validName(FieldName field) {
-        try{return FieldName.normalized(field.tableName(),field.fieldName());}catch(IllegalArgumentException e){return null;}
+        try{return FieldName.normalized(field.screenName(),field.fieldName());}catch(IllegalArgumentException e){return null;}
     }
     public List<ScreenField> screenFields(long connectionId,long screenId) {
         var saved=names(connectionId);var result=new ArrayList<ScreenField>();
         for(var field:sourceFields(connectionId,screenId)) {
             var name=validName(field);
-            result.add(new ScreenField(name==null?field.tableName():name.tableName(),name==null?field.fieldName():name.fieldName(),name!=null,name!=null&&saved.contains(name)));
+            result.add(new ScreenField(name==null?field.screenName():name.screenName(),name==null?field.fieldName():name.fieldName(),name!=null,name!=null&&saved.contains(name)));
         }
         return result.stream().distinct().toList();
     }
     @Transactional
     public Models.AppendResult saveScreenFields(long connectionId,long screenId,List<FieldName> selected) {
         if(selected==null || selected.size()>10000 || selected.stream().anyMatch(Objects::isNull))throw new IllegalArgumentException("Select no more than 10,000 screen fields.");
-        var requested=new LinkedHashSet<FieldName>();selected.forEach(field->requested.add(FieldName.normalized(field.tableName(),field.fieldName())));
+        String screen=screenName(connectionId,screenId);
+        var requested=new LinkedHashSet<FieldName>();selected.forEach(field->requested.add(FieldName.normalized(field.screenName(),field.fieldName())));
         var available=new LinkedHashSet<FieldName>();
         for(var field:sourceFields(connectionId,screenId)){var valid=validName(field);if(valid!=null)available.add(valid);}
         if(!available.containsAll(requested))throw new IllegalArgumentException("Select only fields returned for this screen. Reload its fields and retry.");
-        for(var field:available)if(!requested.contains(field))db.update("DELETE FROM readable_trigger_field WHERE connection_id=? AND table_name=? AND field_name=?",connectionId,field.tableName(),field.fieldName());
+        db.update("DELETE FROM readable_trigger_field WHERE connection_id=? AND screen_name=?",connectionId,screen);
         int added=0;
         for(var field:requested)try {
-            db.update("INSERT INTO readable_trigger_field(connection_id,table_name,field_name) VALUES(?,?,?)",connectionId,field.tableName(),field.fieldName());added++;
+            db.update("INSERT INTO readable_trigger_field(connection_id,screen_name,field_name) VALUES(?,?,?)",connectionId,field.screenName(),field.fieldName());added++;
         }catch(DuplicateKeyException duplicate){/* Previously selected fields are retained. */}
         return new Models.AppendResult(added,requested.size()-added,list(connectionId).size());
     }
@@ -68,9 +76,9 @@ public class ReadableFieldService {
     public Models.AppendResult append(long id,List<FieldName> fields) {
         check(id);
         if(fields==null || fields.isEmpty() || fields.size()>10000 || fields.stream().anyMatch(Objects::isNull))throw new IllegalArgumentException("Provide between 1 and 10,000 readable fields.");
-        var validated=fields.stream().map(f->FieldName.normalized(f.tableName(),f.fieldName())).toList();int added=0;
+        var validated=fields.stream().map(f->FieldName.normalized(f.screenName(),f.fieldName())).toList();int added=0;
         for(var field:validated)try {
-            db.update("INSERT INTO readable_trigger_field(connection_id,table_name,field_name) VALUES(?,?,?)",id,field.tableName(),field.fieldName());added++;
+            db.update("INSERT INTO readable_trigger_field(connection_id,screen_name,field_name) VALUES(?,?,?)",id,field.screenName(),field.fieldName());added++;
         }catch(DuplicateKeyException duplicate){/* Keep the existing registration. */}
         return new Models.AppendResult(added,fields.size()-added,list(id).size());
     }

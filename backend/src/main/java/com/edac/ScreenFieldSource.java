@@ -20,7 +20,7 @@ public class ScreenFieldSource {
                 while(rows.next()) {
                     if(++count>10000)throw new IllegalArgumentException("Screen contains more than 10,000 fields. Use a smaller screen selection.");
                     String field=rows.getString("FIELD_NAME");if(field==null || field.isBlank())continue;
-                    result.add(new ReadableFieldService.FieldName(rows.getString("TABLE_NAME"),field));
+                    result.add(new ReadableFieldService.FieldName(screen,field));
                 }
             }
             return result;
