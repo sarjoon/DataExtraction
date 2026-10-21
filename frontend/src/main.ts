@@ -18,6 +18,7 @@ bootstrapApplication(AppComponent,{providers:[provideHttpClient(),provideRouter(
   {path:'triggers',component:TriggersComponent},
   {path:'snapshot',component:SnapshotComponent,data:{view:'compare'}},
   {path:'snapshot/tables',component:SnapshotComponent,data:{view:'tables'}},
+  {path:'snapshot/batches',component:SnapshotComponent,data:{view:'batches'}},
   {path:'snapshot/configuration',component:SnapshotComponent,data:{view:'configuration'}},
   {path:'snapshot/capture',component:SnapshotComponent,data:{view:'capture'}},
   {path:'snapshot/history',component:SnapshotComponent,data:{view:'history'}},

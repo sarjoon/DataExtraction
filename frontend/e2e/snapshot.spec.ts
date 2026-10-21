@@ -2,8 +2,10 @@ import {test,expect} from '@playwright/test';
 
 test('Snapshot configures exclusions, captures, compares, paginates and reopens history',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ let batches:{id:number;name:string;tables:string[]}[]=[];
  let registered=['ITEMS'];let configs=[{tableName:'ITEMS',ignoredColumns:['AUDIT_TS']}];let captured=false;let compared=false;
  const report={id:'ITEMS_20261021_120000_001',timestamp:'20261021_120000_001',startedAt:'2026-10-21T04:00:00Z',completedAt:'2026-10-21T04:01:00Z',before:{name:'Before DB',schema:'PUBLIC'},after:{name:'After DB',schema:'PUBLIC'},tables:[{tableName:'ITEMS',primaryKeys:['ID','PART'],columns:['ID','PART','VALUE_N','AUDIT_TS'],ignoredColumns:['AUDIT_TS'],beforeCount:500000,afterCount:500000,beforeOnlyCount:12,afterOnlyCount:12,differenceCount:12,unchangedCount:499976,status:'Difference exists'}]};
+ Object.assign(report,{batch:{id:91,name:'Release checks',tables:['ITEMS']},id:'Release_checks_20261021_120000_001'});
  await page.route('**/api/**',async route=>{
   const request=route.request(),url=new URL(request.url()),path=url.pathname;let body:unknown={};
   if(path==='/api/connections')body=[{id:1,name:'Before DB',databaseType:'H2',schema:'PUBLIC'},{id:2,name:'After DB',databaseType:'H2',schema:'PUBLIC'}];
@@ -12,10 +14,11 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
   else if(path.endsWith('/tables'))body=[{id:7,connectionId:1,schema:'PUBLIC',name:'EDAC_ONLY',source:'DATABASE'}];
   else if(path==='/api/snapshot/tables/1'){if(request.method()==='POST')registered=request.postDataJSON();body=registered;}
   else if(path==='/api/snapshot/tables/1/discover')body=['FOURTH','ITEMS','NOT_SELECTED','THIRD'];
+  else if(path==='/api/snapshot/batches/1'){if(request.method()==='POST'){const input=request.postDataJSON();const batch={id:input.id??91,name:input.name,tables:input.tables};batches=[...batches.filter(b=>b.id!==batch.id),batch];body=batch;}else body=batches;}
   else if(path==='/api/snapshot/configuration/1'){if(request.method()==='POST')configs=request.postDataJSON();body=configs;}
   else if(path==='/api/snapshot/columns/1/ITEMS')body={tableName:'ITEMS',schema:'PUBLIC',primaryKeys:['ID','PART'],columns:[{name:'ID',typeName:'INTEGER'},{name:'PART',typeName:'VARCHAR'},{name:'VALUE_N',typeName:'DECIMAL'},{name:'AUDIT_TS',typeName:'TIMESTAMP'}]};
   else if(path==='/api/snapshot/inspect')body=[{tableName:'ITEMS',exists:true,recordCount:500000}];
-  else if(path==='/api/snapshot/capture'){expect(request.postDataJSON()).toEqual({sourceId:1,targetId:2,tables:['ITEMS'],mode:'APPEND'});captured=true;body={id:'capture',operation:'CAPTURE',status:'RUNNING',message:'Starting',processed:0};}
+  else if(path==='/api/snapshot/capture'){expect(request.postDataJSON()).toEqual({sourceId:1,targetId:2,tables:[],mode:'APPEND',batchId:91});captured=true;body={id:'capture',operation:'CAPTURE',status:'RUNNING',message:'Starting',processed:0};}
   else if(path==='/api/snapshot/compare'){compared=true;body={id:'compare',operation:'COMPARE',status:'RUNNING',message:'Starting',processed:0};}
   else if(path==='/api/snapshot/jobs/capture')body={id:'capture',operation:'CAPTURE',status:'COMPLETED',message:'Completed',processed:500000,reportId:null};
   else if(path==='/api/snapshot/jobs/compare')body={id:'compare',operation:'COMPARE',status:'COMPLETED',message:'Completed',processed:1000000,reportId:report.id};
@@ -35,11 +38,11 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
  await expect(page.getByRole('checkbox',{name:'Register ITEMS',exact:true})).toBeChecked();
  await page.getByRole('checkbox',{name:'Register NOT_SELECTED',exact:true}).check();
  await page.getByRole('checkbox',{name:'Register THIRD',exact:true}).check();
- await expect(page.getByRole('checkbox',{name:'Register FOURTH',exact:true})).toBeDisabled();
- await page.getByRole('checkbox',{name:'Register THIRD',exact:true}).uncheck();
+ await expect(page.getByRole('checkbox',{name:'Register FOURTH',exact:true})).toBeEnabled();
+ await page.getByRole('checkbox',{name:'Register FOURTH',exact:true}).check();
  await page.getByRole('button',{name:'Save selected tables',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Snapshot table selections saved'})).toBeVisible();
- expect(registered).toEqual(['ITEMS','NOT_SELECTED']);
+ expect(registered).toEqual(['ITEMS','NOT_SELECTED','THIRD','FOURTH']);
  await page.reload();await expect(page.getByRole('checkbox',{name:'Register NOT_SELECTED',exact:true})).toBeChecked();
  await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Configuration',exact:true}).click();
  const table=page.getByRole('combobox',{name:'Table name',exact:true});
@@ -50,13 +53,21 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
  await expect(page.getByRole('checkbox',{name:/ID INTEGER/})).toBeDisabled();
  await expect(page.getByRole('checkbox',{name:/AUDIT_TS/})).toBeChecked();
  await page.getByRole('button',{name:'Save table configuration',exact:true}).click();await expect(page.getByRole('status').filter({hasText:'Snapshot configuration saved'})).toBeVisible();
+ await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Batches',exact:true}).click();
+ await page.getByLabel('Batch name',{exact:true}).fill('Release checks');
+ await page.getByRole('checkbox',{name:'Assign ITEMS',exact:true}).check();
+ await page.getByRole('button',{name:'Create batch',exact:true}).click();
+ await expect(page.getByRole('status').filter({hasText:'Snapshot batch saved'})).toBeVisible();
  await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Take snapshot',exact:true}).click();
- await page.getByRole('checkbox',{name:/ITEMS/}).check();await page.getByRole('button',{name:'Inspect destination'}).click();
+ await page.getByRole('combobox',{name:'Execution batch',exact:true}).selectOption({label:'Release checks (1 tables)'});
+ await expect(page.getByRole('checkbox',{name:/ITEMS/})).toBeChecked();
+ await expect(page.getByRole('checkbox',{name:/ITEMS/})).toBeDisabled();
+ await page.getByRole('button',{name:'Inspect destination'}).click();
  await expect(page.getByRole('button',{name:'Take snapshot',exact:true})).toBeDisabled();
  await page.getByRole('radio',{name:'Append and update duplicate primary keys'}).check();await page.getByRole('button',{name:'Take snapshot',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Snapshot captured successfully'})).toBeVisible();expect(captured).toBe(true);
  await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Compare',exact:true}).click();
- await page.getByRole('checkbox',{name:/ITEMS/}).check();await page.getByRole('button',{name:'Compare tables'}).click();
+ await page.getByRole('combobox',{name:'Execution batch',exact:true}).selectOption({label:'Release checks (1 tables)'});await page.getByRole('button',{name:'Compare tables'}).click();
  await expect(page.getByRole('cell',{name:'Difference exists',exact:true})).toBeVisible();expect(compared).toBe(true);
  await expect(page.getByRole('img',{name:/499976 unchanged/})).toBeVisible();
  await page.screenshot({path:'../outputs/snapshot-verification/dashboard.png',fullPage:true});

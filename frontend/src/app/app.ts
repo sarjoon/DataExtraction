@@ -11,6 +11,7 @@ import { Api } from './api';
     <a routerLink="/connections" routerLinkActive="active">Database connections</a>
     <details class="feature-menu" open><summary>Snapshot</summary>
       <a routerLink="/snapshot/tables" routerLinkActive="active">Table Definition</a>
+      <a routerLink="/snapshot/batches" routerLinkActive="active">Batches</a>
       <a routerLink="/snapshot/configuration" routerLinkActive="active">Configuration</a>
       <a routerLink="/snapshot/capture" routerLinkActive="active">Take snapshot</a>
       <a routerLink="/snapshot" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Compare</a>

@@ -12,6 +12,9 @@ import org.springframework.web.bind.annotation.*;
 public class SnapshotController {
     private final SnapshotService snapshots;private final SnapshotReports reports;
     public SnapshotController(SnapshotService snapshots,SnapshotReports reports){this.snapshots=snapshots;this.reports=reports;}
+    @GetMapping("/batches/{connection}") public List<SnapshotService.Batch> batches(@PathVariable long connection){return snapshots.batches(connection);}
+    @PostMapping("/batches/{connection}") public SnapshotService.Batch saveBatch(@PathVariable long connection,@RequestBody SnapshotService.BatchInput input){return snapshots.saveBatch(connection,input);}
+    @PostMapping("/batches/{connection}/{id}/remove") public void removeBatch(@PathVariable long connection,@PathVariable long id){snapshots.removeBatch(connection,id);}
     @GetMapping("/tables/{connection}") public List<String> tables(@PathVariable long connection){return snapshots.registeredTables(connection);}
     @GetMapping("/tables/{connection}/discover") public List<String> discover(@PathVariable long connection) throws SQLException{return snapshots.discoverTables(connection);}
     @PostMapping("/tables/{connection}") public List<String> register(@PathVariable long connection,@RequestBody List<String> tables) throws SQLException{return snapshots.registerTables(connection,tables);}

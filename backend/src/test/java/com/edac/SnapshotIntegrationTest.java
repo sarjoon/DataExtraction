@@ -100,11 +100,33 @@ class SnapshotIntegrationTest {
         assertThat(service.registeredTables(second)).isEmpty();assertThat(registry.tables(first)).extracting(Models.TableEntry::name).containsExactly("EDAC_ONLY");
         assertThatThrownBy(()->service.registerTables(first,List.of("OTHER_TABLE","NO_KEY"))).hasMessageContaining("primary key");
         assertThat(service.registeredTables(first)).containsExactly("SNAP_ONLY");assertThat(service.config(first)).hasSize(1);
-        assertThatThrownBy(()->service.registerTables(first,List.of("A","B","C","D"))).hasMessageContaining("three");
         assertThatThrownBy(()->service.columns(first,"OTHER_TABLE")).hasMessageContaining("registered Snapshot table");
         mvc.perform(get("/api/snapshot/tables/"+first+"/discover")).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3));
         service.registerTables(first,List.of("OTHER_TABLE"));assertThat(service.config(first)).isEmpty();assertThat(registry.tables(first)).hasSize(1);
         mvc.perform(post("/api/snapshot/tables/"+first).contentType("application/json").content("[]")).andExpect(status().isForbidden());
+    }
+    @Test void runsNamedBatchesWithMoreThanThreeTablesAndPreservesReportBatchNames() throws Exception {
+        long first=connection(database()),second=connection(database()),other=connection(database());
+        List<String> names=List.of("BATCH_A","BATCH_B","BATCH_C","BATCH_D");
+        try(var c=databases.open(first);var s=c.createStatement()){for(String name:names){s.execute("CREATE TABLE "+name+"(ID INT PRIMARY KEY,VALUE_N INT)");s.execute("INSERT INTO "+name+" VALUES(1,10)");}}
+        service.registerTables(first,names);service.configure(first,names.stream().map(name->new SnapshotService.Config(name,List.of())).toList());
+        var batch=service.saveBatch(first,new SnapshotService.BatchInput(null,"Release checks",names));
+        service.saveBatch(first,new SnapshotService.BatchInput(null,"Shared table",List.of("BATCH_A")));
+        assertThat(service.registeredTables(first)).hasSize(4);assertThat(service.config(first)).hasSize(4);
+        assertThatThrownBy(()->service.saveBatch(first,new SnapshotService.BatchInput(null,"Release checks",names))).hasMessageContaining("already exists");
+        assertThatThrownBy(()->service.saveBatch(first,new SnapshotService.BatchInput(null,"../invalid",names))).hasMessageContaining("Batch names");
+        assertThatThrownBy(()->service.saveBatch(first,new SnapshotService.BatchInput(null,"Empty",List.of()))).hasMessageContaining("at least one");
+        assertThatThrownBy(()->service.start(new SnapshotService.Request(first,second,List.of("BATCH_A"),null,batch.id()),true)).hasMessageContaining("complete saved batch");
+        assertThatThrownBy(()->service.start(new SnapshotService.Request(other,second,List.of(),null,batch.id()),true)).hasMessageContaining("batch not found");
+        var capture=new SnapshotService.Request(first,second,List.of(),"CREATE",batch.id());assertThat(service.inspect(capture)).hasSize(4);success(service.start(capture,false));
+        assertThat(service.batches(second)).anySatisfy(b->{assertThat(b.name()).isEqualTo("Release checks");assertThat(b.tables()).containsExactlyElementsOf(names);});
+        var job=service.start(new SnapshotService.Request(first,second,List.of(),null,batch.id()),true);success(job);assertThat(job.id()).startsWith("Release_checks_");
+        var report=reports.summary(job.id());assertThat(((Map<?,?>)report.get("batch")).get("name")).isEqualTo("Release checks");assertThat((List<?>)report.get("tables")).hasSize(4);
+        assertThat(directory.resolve("snapshot/json/"+job.id()+".json")).exists();assertThat(reports.zip(job.id()).getFileName().toString()).isEqualTo(job.id()+".zip");
+        try(var zip=new ZipFile(reports.zip(job.id()).toFile())){assertThat(zip.size()).isEqualTo(4);}
+        service.saveBatch(first,new SnapshotService.BatchInput(batch.id(),"Renamed",names));service.removeBatch(first,batch.id());
+        assertThat(((Map<?,?>)reports.summary(job.id()).get("batch")).get("name")).isEqualTo("Release checks");assertThat(service.registeredTables(first)).hasSize(4);
+        mvc.perform(post("/api/snapshot/batches/"+first).contentType("application/json").content("{}")).andExpect(status().isForbidden());
     }
     @Test void rollsBackDestinationRowsWhenTruncateImportFails() throws Exception {
         long first=connection(database()),second=connection(database());
