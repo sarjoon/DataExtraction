@@ -27,6 +27,7 @@ class SnapshotIntegrationTest {
     @DynamicPropertySource static void settings(DynamicPropertyRegistry registry){registry.add("edac.snapshot.directory",()->directory.toString());}
     @Autowired SnapshotService service;@Autowired SnapshotReports reports;@Autowired SnapshotDatabase databases;@Autowired RegistryService registry;@Autowired ObjectMapper json;@Autowired MockMvc mvc;
     long connection(String database){return registry.save(new Models.ConnectionInput("Snapshot "+UUID.randomUUID(),"H2","localhost",9092,"MEMORY",database,"sa","","")).id();}
+    List<SnapshotService.Config> configure(long connection,List<SnapshotService.Config> configs) throws SQLException {service.registerTables(connection,configs.stream().map(SnapshotService.Config::tableName).toList());return service.configure(connection,configs);}
     String database(){return "snapshot_"+UUID.randomUUID().toString().replace("-","");}
     SnapshotService.Job await(SnapshotService.Job job) throws Exception {
         long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(90);
@@ -41,7 +42,7 @@ class SnapshotIntegrationTest {
             s.execute("CREATE TABLE ITEMS_EXTRA(OTHER_ID INT PRIMARY KEY)");
             s.execute("INSERT INTO ITEMS SELECT X,'A',X/10.0,'name'||X,TIMESTAMP '2026-01-01 00:00:00' FROM SYSTEM_RANGE(1,640)");
         }
-        service.configure(before,List.of(new SnapshotService.Config("ITEMS",List.of("AUDIT_TS"))));
+        configure(before,List.of(new SnapshotService.Config("ITEMS",List.of("AUDIT_TS"))));
         var capture=new SnapshotService.Request(before,after,List.of("ITEMS"),"CREATE");
         assertThat(service.inspect(capture).get(0)).containsEntry("exists",false);
         success(service.start(capture,false));
@@ -74,22 +75,42 @@ class SnapshotIntegrationTest {
     @Test void rejectsMissingKeysIgnoredKeysAndSameDatabaseAliasesAndSupportsEmptyTables() throws Exception {
         String name=database();long first=connection(name),alias=connection(name),other=connection(database());
         try(var c=databases.open(first);var s=c.createStatement()){s.execute("CREATE TABLE EMPTY_TABLE(ID INT PRIMARY KEY,VALUE_N DECIMAL(10,2))");s.execute("CREATE TABLE NO_KEY(VALUE_N INT)");}
-        assertThatThrownBy(()->service.configure(first,List.of(new SnapshotService.Config("NO_KEY",List.of())))).hasMessageContaining("primary key");
-        assertThatThrownBy(()->service.configure(first,List.of(new SnapshotService.Config("EMPTY_TABLE",List.of("ID"))))).hasMessageContaining("cannot be ignored");
-        service.configure(first,List.of(new SnapshotService.Config("EMPTY_TABLE",List.of())));
+        assertThatThrownBy(()->configure(first,List.of(new SnapshotService.Config("NO_KEY",List.of())))).hasMessageContaining("primary key");
+        assertThatThrownBy(()->configure(first,List.of(new SnapshotService.Config("EMPTY_TABLE",List.of("ID"))))).hasMessageContaining("cannot be ignored");
+        configure(first,List.of(new SnapshotService.Config("EMPTY_TABLE",List.of())));
         assertThatThrownBy(()->service.inspect(new SnapshotService.Request(first,alias,List.of("EMPTY_TABLE"),"CREATE"))).hasMessageContaining("same database");
         success(service.start(new SnapshotService.Request(first,other,List.of("EMPTY_TABLE"),"CREATE"),false));
         var compare=service.start(new SnapshotService.Request(first,other,List.of("EMPTY_TABLE"),null),true);success(compare);
         assertThat(((Map<?,?>)((List<?>)reports.summary(compare.id()).get("tables")).get(0)).get("status")).isEqualTo("No difference");
         assertThatThrownBy(()->reports.page(compare.id(),"EMPTY_TABLE","differences",-1,10)).hasMessageContaining("page size");
         assertThatThrownBy(()->reports.summary("../outside")).hasMessageContaining("Invalid snapshot");
-        assertThat(service.configure(first,List.of())).isEmpty();
+        assertThat(configure(first,List.of())).isEmpty();
+    }
+    @Test void registersDictionaryTablesSeparatelyFromEdacAndEnforcesSelection() throws Exception {
+        long first=connection(database()),second=connection(database());
+        try(var c=databases.open(first);var s=c.createStatement()){
+            s.execute("CREATE TABLE SNAP_ONLY(ID INT PRIMARY KEY,AUDIT_N INT)");s.execute("CREATE TABLE OTHER_TABLE(ID INT PRIMARY KEY)");s.execute("CREATE TABLE NO_KEY(VALUE_N INT)");
+            s.execute("CREATE SCHEMA OTHER_OWNER");s.execute("CREATE TABLE OTHER_OWNER.HIDDEN_TABLE(ID INT PRIMARY KEY)");s.execute("CREATE VIEW TABLE_VIEW AS SELECT * FROM SNAP_ONLY");
+        }
+        registry.append(first,List.of("EDAC_ONLY"),"MANUAL");
+        assertThat(service.discoverTables(first)).containsExactly("NO_KEY","OTHER_TABLE","SNAP_ONLY");assertThat(service.registeredTables(first)).isEmpty();
+        assertThatThrownBy(()->service.configure(first,List.of(new SnapshotService.Config("SNAP_ONLY",List.of())))).hasMessageContaining("registered Snapshot table");
+        mvc.perform(post("/api/snapshot/tables/"+first).with(csrf()).contentType("application/json").content("[\"SNAP_ONLY\"]")).andExpect(status().isOk()).andExpect(jsonPath("$[0]").value("SNAP_ONLY"));
+        service.configure(first,List.of(new SnapshotService.Config("SNAP_ONLY",List.of("AUDIT_N"))));
+        assertThat(service.registeredTables(second)).isEmpty();assertThat(registry.tables(first)).extracting(Models.TableEntry::name).containsExactly("EDAC_ONLY");
+        assertThatThrownBy(()->service.registerTables(first,List.of("OTHER_TABLE","NO_KEY"))).hasMessageContaining("primary key");
+        assertThat(service.registeredTables(first)).containsExactly("SNAP_ONLY");assertThat(service.config(first)).hasSize(1);
+        assertThatThrownBy(()->service.registerTables(first,List.of("A","B","C","D"))).hasMessageContaining("three");
+        assertThatThrownBy(()->service.columns(first,"OTHER_TABLE")).hasMessageContaining("registered Snapshot table");
+        mvc.perform(get("/api/snapshot/tables/"+first+"/discover")).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3));
+        service.registerTables(first,List.of("OTHER_TABLE"));assertThat(service.config(first)).isEmpty();assertThat(registry.tables(first)).hasSize(1);
+        mvc.perform(post("/api/snapshot/tables/"+first).contentType("application/json").content("[]")).andExpect(status().isForbidden());
     }
     @Test void rollsBackDestinationRowsWhenTruncateImportFails() throws Exception {
         long first=connection(database()),second=connection(database());
         try(var c=databases.open(first);var s=c.createStatement()){s.execute("CREATE TABLE LIMITED_TABLE(ID INT PRIMARY KEY,NOTE VARCHAR(100))");s.execute("INSERT INTO LIMITED_TABLE VALUES(1,'too long for destination')");}
         try(var c=databases.open(second);var s=c.createStatement()){s.execute("CREATE TABLE LIMITED_TABLE(ID INT PRIMARY KEY,NOTE VARCHAR(3))");s.execute("INSERT INTO LIMITED_TABLE VALUES(99,'old')");}
-        service.configure(first,List.of(new SnapshotService.Config("LIMITED_TABLE",List.of())));
+        configure(first,List.of(new SnapshotService.Config("LIMITED_TABLE",List.of())));
         var failed=await(service.start(new SnapshotService.Request(first,second,List.of("LIMITED_TABLE"),"TRUNCATE"),false));assertThat(failed.status()).isEqualTo("FAILED");
         try(var c=databases.open(second);var s=c.createStatement();var r=s.executeQuery("SELECT ID,NOTE FROM LIMITED_TABLE")){assertThat(r.next()).isTrue();assertThat(r.getInt(1)).isEqualTo(99);assertThat(r.getString(2)).isEqualTo("old");assertThat(r.next()).isFalse();}
     }
@@ -97,7 +118,7 @@ class SnapshotIntegrationTest {
         long first=connection(database()),second=connection(database());
         for(long id:List.of(first,second))try(var c=databases.open(id);var s=c.createStatement()){s.execute("CREATE TABLE MANY_CHANGES(ID INT PRIMARY KEY,NOTE VARCHAR(50))");s.execute("INSERT INTO MANY_CHANGES SELECT X,'old' FROM SYSTEM_RANGE(1,250)");}
         try(var c=databases.open(second);var s=c.createStatement()){s.execute("UPDATE MANY_CHANGES SET NOTE='new'");}
-        service.configure(first,List.of(new SnapshotService.Config("MANY_CHANGES",List.of())));var job=service.start(new SnapshotService.Request(first,second,List.of("MANY_CHANGES"),null),true);success(job);
+        configure(first,List.of(new SnapshotService.Config("MANY_CHANGES",List.of())));var job=service.start(new SnapshotService.Request(first,second,List.of("MANY_CHANGES"),null),true);success(job);
         assertThat(reports.page(job.id(),"MANY_CHANGES","differences",24,10).get("total")).isEqualTo(250L);assertThat((List<?>)reports.page(job.id(),"MANY_CHANGES","differences",24,10).get("rows")).hasSize(10);
         try(var zip=new ZipFile(reports.zip(job.id()).toFile());var book=new XSSFWorkbook(zip.getInputStream(zip.entries().nextElement()))){assertThat(book.getSheet("Differences").getLastRowNum()).isEqualTo(250);assertThat(book.getSheet("Differences").getRow(0).getCell(0).getStringCellValue()).isEqualTo("ID");}
     }
@@ -108,7 +129,7 @@ class SnapshotIntegrationTest {
             s.execute("INSERT INTO PAYLOADS VALUES(1,X'0102FF','text',TIMESTAMP '2026-01-01 12:34:56.123456789'),(2,NULL,NULL,NULL)");
             s.execute("CREATE TABLE SECOND_TABLE(ID INT PRIMARY KEY,VALUE_N DECIMAL(10,2))");
         }
-        service.configure(first,List.of(new SnapshotService.Config("PAYLOADS",List.of()),new SnapshotService.Config("SECOND_TABLE",List.of())));
+        configure(first,List.of(new SnapshotService.Config("PAYLOADS",List.of()),new SnapshotService.Config("SECOND_TABLE",List.of())));
         success(service.start(new SnapshotService.Request(first,second,List.of("PAYLOADS","SECOND_TABLE"),"CREATE"),false));
         var job=service.start(new SnapshotService.Request(first,second,List.of("PAYLOADS","SECOND_TABLE"),null),true);success(job);
         try(var entries=new ZipFile(reports.zip(job.id()).toFile())){assertThat(entries.size()).isEqualTo(2);}

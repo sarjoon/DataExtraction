@@ -2,14 +2,16 @@ import {test,expect} from '@playwright/test';
 
 test('Snapshot configures exclusions, captures, compares, paginates and reopens history',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- let configs=[{tableName:'ITEMS',ignoredColumns:['AUDIT_TS']}];let captured=false;let compared=false;
+ let registered=['ITEMS'];let configs=[{tableName:'ITEMS',ignoredColumns:['AUDIT_TS']}];let captured=false;let compared=false;
  const report={id:'ITEMS_20261021_120000_001',timestamp:'20261021_120000_001',startedAt:'2026-10-21T04:00:00Z',completedAt:'2026-10-21T04:01:00Z',before:{name:'Before DB',schema:'PUBLIC'},after:{name:'After DB',schema:'PUBLIC'},tables:[{tableName:'ITEMS',primaryKeys:['ID','PART'],columns:['ID','PART','VALUE_N','AUDIT_TS'],ignoredColumns:['AUDIT_TS'],beforeCount:500000,afterCount:500000,beforeOnlyCount:12,afterOnlyCount:12,differenceCount:12,unchangedCount:499976,status:'Difference exists'}]};
  await page.route('**/api/**',async route=>{
   const request=route.request(),url=new URL(request.url()),path=url.pathname;let body:unknown={};
   if(path==='/api/connections')body=[{id:1,name:'Before DB',databaseType:'H2',schema:'PUBLIC'},{id:2,name:'After DB',databaseType:'H2',schema:'PUBLIC'}];
   else if(path==='/api/status')body={status:'UP',database:'H2'};
   else if(path==='/api/csrf')body={};
-  else if(path.endsWith('/tables'))body=[];
+  else if(path.endsWith('/tables'))body=[{id:7,connectionId:1,schema:'PUBLIC',name:'EDAC_ONLY',source:'DATABASE'}];
+  else if(path==='/api/snapshot/tables/1'){if(request.method()==='POST')registered=request.postDataJSON();body=registered;}
+  else if(path==='/api/snapshot/tables/1/discover')body=['FOURTH','ITEMS','NOT_SELECTED','THIRD'];
   else if(path==='/api/snapshot/configuration/1'){if(request.method()==='POST')configs=request.postDataJSON();body=configs;}
   else if(path==='/api/snapshot/columns/1/ITEMS')body={tableName:'ITEMS',schema:'PUBLIC',primaryKeys:['ID','PART'],columns:[{name:'ID',typeName:'INTEGER'},{name:'PART',typeName:'VARCHAR'},{name:'VALUE_N',typeName:'DECIMAL'},{name:'AUDIT_TS',typeName:'TIMESTAMP'}]};
   else if(path==='/api/snapshot/inspect')body=[{tableName:'ITEMS',exists:true,recordCount:500000}];
@@ -24,8 +26,26 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
   else throw new Error('Unexpected API request '+path);
   await route.fulfill({json:body});
  });
- await page.goto('/snapshot/configuration');
- await page.getByLabel('Table name',{exact:true}).fill('ITEMS');await page.getByRole('button',{name:'Load columns',exact:true}).click();
+ await page.goto('/snapshot/tables');
+ const navigation=page.getByRole('navigation',{name:'Main navigation'});
+ await expect(navigation.locator('details').filter({has:page.locator('summary',{hasText:'EDAC Extraction'})}).getByRole('link',{name:'Table list',exact:false})).toBeVisible();
+ await expect(navigation.locator('details').filter({has:page.locator('summary',{hasText:'Call Trigger'})}).getByRole('link',{name:'Complete Call Trigger',exact:true})).toBeVisible();
+ await expect(navigation.getByRole('link',{name:'Database connections',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Discover tables',exact:true}).click();
+ await expect(page.getByRole('checkbox',{name:'Register ITEMS',exact:true})).toBeChecked();
+ await page.getByRole('checkbox',{name:'Register NOT_SELECTED',exact:true}).check();
+ await page.getByRole('checkbox',{name:'Register THIRD',exact:true}).check();
+ await expect(page.getByRole('checkbox',{name:'Register FOURTH',exact:true})).toBeDisabled();
+ await page.getByRole('checkbox',{name:'Register THIRD',exact:true}).uncheck();
+ await page.getByRole('button',{name:'Save selected tables',exact:true}).click();
+ await expect(page.getByRole('status').filter({hasText:'Snapshot table selections saved'})).toBeVisible();
+ expect(registered).toEqual(['ITEMS','NOT_SELECTED']);
+ await page.reload();await expect(page.getByRole('checkbox',{name:'Register NOT_SELECTED',exact:true})).toBeChecked();
+ await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Configuration',exact:true}).click();
+ const table=page.getByRole('combobox',{name:'Table name',exact:true});
+ await expect(table.getByRole('option',{name:'EDAC_ONLY',exact:true})).toHaveCount(0);
+ await expect(table.getByRole('option',{name:'NOT_SELECTED',exact:true})).toHaveCount(1);
+ await table.selectOption('ITEMS');await page.getByRole('button',{name:'Load columns',exact:true}).click();
  await expect(page.getByRole('checkbox',{name:'ID INTEGER',exact:true})).toHaveCount(0);
  await expect(page.getByRole('checkbox',{name:/ID INTEGER/})).toBeDisabled();
  await expect(page.getByRole('checkbox',{name:/AUDIT_TS/})).toBeChecked();

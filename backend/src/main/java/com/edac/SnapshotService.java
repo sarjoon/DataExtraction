@@ -30,6 +30,21 @@ public class SnapshotService {
     @PreDestroy void close(){worker.shutdownNow();}
     String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalArgumentException("Cannot serialize snapshot data.",e);}}
     Map<String,String> decode(String text){try{return json.readValue(text,new TypeReference<LinkedHashMap<String,String>>(){});}catch(Exception e){throw new IllegalArgumentException("Cannot read snapshot working data.",e);}}
+    public List<String> registeredTables(long connection){registry.connection(connection);return db.queryForList("SELECT table_name FROM snapshot_table_registry WHERE connection_id=? ORDER BY table_name",String.class,connection);}
+    public List<String> discoverTables(long connection) throws SQLException {try(var c=databases.open(connection)){return databases.discover(c,connection);}}
+    @org.springframework.transaction.annotation.Transactional
+    public synchronized List<String> registerTables(long connection,List<String> names) throws SQLException {
+        if(active!=null)throw new IllegalArgumentException("Wait for the active Snapshot job before changing registered tables.");
+        registry.connection(connection);
+        if(names==null||names.size()>3)throw new IllegalArgumentException("Register at most three Snapshot tables per connection.");
+        var selected=new LinkedHashSet<String>();for(String name:names)if(!selected.add(RegistryService.identifier(name)))throw new IllegalArgumentException("Select each table once.");
+        // Validate the complete selection against the source dictionary before updating H2.
+        if(!selected.isEmpty())try(var c=databases.open(connection)){for(String name:selected)databases.describe(c,connection,name);}
+        for(String name:selected)db.update("MERGE INTO snapshot_table_registry(connection_id,table_name) KEY(connection_id,table_name) VALUES(?,?)",connection,name);
+        for(String name:registeredTables(connection))if(!selected.contains(name))db.update("DELETE FROM snapshot_table_registry WHERE connection_id=? AND table_name=?",connection,name);
+        return registeredTables(connection);
+    }
+    private String registeredTable(long connection,String name){String normalized=RegistryService.identifier(name);if(!registeredTables(connection).contains(normalized))throw new IllegalArgumentException("Select a registered Snapshot table. Use Snapshot Table Definition first.");return normalized;}
     public List<Config> config(long connection){registry.connection(connection);return db.query("SELECT table_name,ignored_columns FROM snapshot_table WHERE connection_id=? ORDER BY table_name",(r,n)->{
         try{return new Config(r.getString(1),json.readValue(r.getString(2),new TypeReference<List<String>>(){}));}catch(Exception e){throw new IllegalStateException(e);}
     },connection);}
@@ -38,13 +53,13 @@ public class SnapshotService {
         if(active!=null)throw new IllegalArgumentException("Wait for the active Snapshot job before changing configuration.");
         if(configs==null||configs.size()>3)throw new IllegalArgumentException("Configure at most three tables per connection.");
         var validated=new ArrayList<Config>();var unique=new HashSet<String>();
-        try(var c=databases.open(connection)){for(var input:configs){if(input==null||input.ignoredColumns()==null)throw new IllegalArgumentException("Provide a table and ignored columns.");String name=RegistryService.identifier(input.tableName());if(!unique.add(name))throw new IllegalArgumentException("Each table can be configured once.");var table=databases.describe(c,connection,name);var ignored=input.ignoredColumns().stream().map(RegistryService::identifier).distinct().toList();for(String col:ignored){table.column(col);if(table.keys().contains(col))throw new IllegalArgumentException("Primary-key columns cannot be ignored: "+col);}validated.add(new Config(name,ignored));}}
+        try(var c=databases.open(connection)){for(var input:configs){if(input==null||input.ignoredColumns()==null)throw new IllegalArgumentException("Provide a table and ignored columns.");String name=registeredTable(connection,input.tableName());if(!unique.add(name))throw new IllegalArgumentException("Each table can be configured once.");var table=databases.describe(c,connection,name);var ignored=input.ignoredColumns().stream().map(RegistryService::identifier).distinct().toList();for(String col:ignored){table.column(col);if(table.keys().contains(col))throw new IllegalArgumentException("Primary-key columns cannot be ignored: "+col);}validated.add(new Config(name,ignored));}}
         // MERGE then remove obsolete entries; validation completes before configuration is changed.
         for(var item:validated)db.update("MERGE INTO snapshot_table(connection_id,table_name,ignored_columns) KEY(connection_id,table_name) VALUES(?,?,?)",connection,item.tableName(),encode(item.ignoredColumns()));
         for(var old:config(connection))if(!unique.contains(old.tableName()))db.update("DELETE FROM snapshot_table WHERE connection_id=? AND table_name=?",connection,old.tableName());
         return config(connection);
     }
-    public Map<String,Object> columns(long connection,String table) throws SQLException {try(var c=databases.open(connection)){var t=databases.describe(c,connection,table);return Map.of("tableName",t.name(),"schema",t.schema(),"primaryKeys",t.keys(),"columns",t.columns());}}
+    public Map<String,Object> columns(long connection,String table) throws SQLException {String name=registeredTable(connection,table);try(var c=databases.open(connection)){var t=databases.describe(c,connection,name);return Map.of("tableName",t.name(),"schema",t.schema(),"primaryKeys",t.keys(),"columns",t.columns());}}
     private List<Config> validate(Request request){
         if(request.sourceId()==request.targetId())throw new IllegalArgumentException("Choose different Before/Source and After/Target connections.");
         registry.connection(request.sourceId());registry.connection(request.targetId());
@@ -93,8 +108,8 @@ public class SnapshotService {
         if(!new HashSet<>(before.columns().stream().map(Column::name).toList()).equals(new HashSet<>(after.columns().stream().map(Column::name).toList())))throw new IllegalArgumentException("Column names differ for "+before.name());
     }
     private void capture(String id,Request request,List<Config> configs) throws SQLException {
-        var targetTables=new HashSet<>(config(request.targetId()).stream().map(Config::tableName).toList());configs.forEach(c->targetTables.add(c.tableName()));
-        if(targetTables.size()>3)throw new IllegalArgumentException("The destination would have more than three configured Snapshot tables. Remove unused destination configurations first.");
+        var targetTables=new HashSet<>(registeredTables(request.targetId()));configs.forEach(c->targetTables.add(c.tableName()));
+        if(targetTables.size()>3)throw new IllegalArgumentException("The destination would have more than three configured Snapshot tables. Remove unused destination tables under Snapshot Table Definition first.");
         try(var source=databases.open(request.sourceId());var target=databases.open(request.targetId())){
             different(source,request.sourceId(),target,request.targetId());boolean oracle=registry.connection(request.targetId()).databaseType().equals("ORACLE");
             // Validate every table before the first destination mutation.
@@ -115,7 +130,7 @@ public class SnapshotService {
             }target.commit();}catch(Exception e){target.rollback();throw e;}
         }
         // A captured database can immediately be selected as Before, with the same exclusions.
-        transactions.executeWithoutResult(status->{for(var config:configs)db.update("MERGE INTO snapshot_table(connection_id,table_name,ignored_columns) KEY(connection_id,table_name) VALUES(?,?,?)",request.targetId(),config.tableName(),encode(config.ignoredColumns()));});
+        transactions.executeWithoutResult(status->{for(var config:configs){db.update("MERGE INTO snapshot_table_registry(connection_id,table_name) KEY(connection_id,table_name) VALUES(?,?)",request.targetId(),config.tableName());db.update("MERGE INTO snapshot_table(connection_id,table_name,ignored_columns) KEY(connection_id,table_name) VALUES(?,?,?)",request.targetId(),config.tableName(),encode(config.ignoredColumns()));}});
     }
     private String hash(Map<String,String> key){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(encode(key).getBytes(StandardCharsets.UTF_8)));}catch(Exception e){throw new IllegalStateException(e);}}
     private void stageKeys(String id,Connection connection,Table table,String side) throws SQLException {

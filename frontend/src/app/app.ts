@@ -7,17 +7,24 @@ import { Api } from './api';
   <a class="brand" routerLink="/overview" aria-label="Extraction Framework home"><span class="corporate-brand">TECH <span>mahindra</span></span><span class="product-name">Extraction<br>Framework</span></a>
   <div class="workspace-label">DATA ENGINEERING WORKSPACE</div>
   <nav aria-label="Main navigation">
-    <a routerLink="/overview" routerLinkActive="active"><span class="nav-icon">◫</span>Overview</a>
-    <div class="nav-heading">CONFIGURATION</div>
-    <a routerLink="/connections" routerLinkActive="active"><span class="nav-icon">▤</span>Database connections</a>
-    <a routerLink="/tables" routerLinkActive="active"><span class="nav-icon">▦</span>Table list<span class="nav-count">{{api.tables().length}}</span></a>
-    <details class="snapshot-menu" open><summary>Snapshot</summary><a routerLink="/snapshot" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Compare</a><a routerLink="/snapshot/configuration" routerLinkActive="active">Configuration</a><a routerLink="/snapshot/capture" routerLinkActive="active">Take snapshot</a><a routerLink="/snapshot/history" routerLinkActive="active">History</a></details>
-    <div class="nav-heading">GENERATION</div>
-    <a routerLink="/triggers" routerLinkActive="active"><span class="nav-icon">&#8644;</span>Complete Call Trigger</a>
-    <a routerLink="/mapping" routerLinkActive="active"><span class="nav-icon">▧</span>Mapping workbook<span class="soon">01</span></a>
-    <a routerLink="/generation" routerLinkActive="active"><span class="nav-icon">≡</span>Fixed-length files<span class="soon">02</span></a>
-  </nav>
-  <div class="sidebar-footer"><span class="status-dot"></span>Local workspace<small>Tech Mahindra · Data engineering</small></div>
+    <a routerLink="/overview" routerLinkActive="active">Overview</a>
+    <a routerLink="/connections" routerLinkActive="active">Database connections</a>
+    <details class="feature-menu" open><summary>Snapshot</summary>
+      <a routerLink="/snapshot/tables" routerLinkActive="active">Table Definition</a>
+      <a routerLink="/snapshot/configuration" routerLinkActive="active">Configuration</a>
+      <a routerLink="/snapshot/capture" routerLinkActive="active">Take snapshot</a>
+      <a routerLink="/snapshot" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Compare</a>
+      <a routerLink="/snapshot/history" routerLinkActive="active">History</a>
+    </details>
+    <details class="feature-menu" open><summary>EDAC Extraction</summary>
+      <a routerLink="/tables" routerLinkActive="active">Table list<span class="nav-count">{{api.tables().length}}</span></a>
+      <a routerLink="/mapping" routerLinkActive="active">Mapping workbook</a>
+      <a routerLink="/generation" routerLinkActive="active">Fixed-length files</a>
+    </details>
+    <details class="feature-menu" open><summary>Call Trigger</summary>
+      <a routerLink="/triggers" routerLinkActive="active">Complete Call Trigger</a>
+    </details>
+  </nav>  <div class="sidebar-footer"><span class="status-dot"></span>Local workspace<small>Tech Mahindra · Data engineering</small></div>
 </aside>
 <div class="workspace">
   <header class="topbar"><span>Extraction Framework</span><span class="environment">{{api.status()?'Configuration DB ready':'Backend offline'}}</span></header>

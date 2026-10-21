@@ -156,7 +156,7 @@ class EdacIntegrationTest {
         return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
     }
     @Test void usesH2ConfigurationAndSavedCredentialsForOracle() throws Exception {
-        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("9"));
+        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("10"));
         long id=connection();
         when(oracle.test(any(),eq("test-secret"))).thenReturn(new Models.TestResult(true,"Oracle test",List.of()));
         when(oracle.discover(any(),eq("test-secret"))).thenReturn(List.of(new Models.TableName("APP","CUSTOMER"),new Models.TableName("APP","ACCOUNT")));

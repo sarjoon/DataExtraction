@@ -27,6 +27,17 @@ public class SnapshotDatabase {
         if(schema==null||schema.isBlank())schema=c.getMetaData().getUserName();return RegistryService.identifier(schema);
     }
     static String quote(String name){return "\""+RegistryService.identifier(name)+"\"";}
+    public List<String> discover(Connection c,long id) throws SQLException {
+        String schema=schema(c,id);var names=new TreeSet<String>();
+        try(var rows=c.getMetaData().getTables(null,schema,"%",new String[]{"TABLE"})){
+            while(rows.next()){
+                String name=rows.getString("TABLE_NAME");
+                if(!schema.equals(rows.getString("TABLE_SCHEM"))||name==null||!name.matches("[A-Z_][A-Z0-9_$#]{0,127}"))continue;
+                names.add(name);if(names.size()>10000)throw new IllegalArgumentException("More than 10,000 accessible tables. Select a more specific connection schema.");
+            }
+        }
+        return List.copyOf(names);
+    }
     public Table describe(Connection c,long id,String name) throws SQLException {
         name=RegistryService.identifier(name);String schema=schema(c,id);var metadata=c.getMetaData();
         var columns=new ArrayList<Column>();

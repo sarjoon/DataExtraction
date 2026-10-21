@@ -26,6 +26,7 @@ class SnapshotScaleTest {
             try{
                 for(long id:ids)try(var c=databases.open(id);var s=c.createStatement()){s.execute("CREATE TABLE SCALE_DATA(ID BIGINT PRIMARY KEY,VALUE_N DECIMAL(14,2),AUDIT_N INT)");s.execute("INSERT INTO SCALE_DATA SELECT X,X/10.0,0 FROM SYSTEM_RANGE(1,500000)");}
                 try(var c=databases.open(ids.get(1));var s=c.createStatement()){s.execute("DELETE FROM SCALE_DATA WHERE ID=1");s.execute("INSERT INTO SCALE_DATA VALUES(500001,1,0)");s.execute("UPDATE SCALE_DATA SET VALUE_N=99 WHERE ID=3");s.execute("UPDATE SCALE_DATA SET AUDIT_N=1");}
+                service.registerTables(ids.get(0),List.of("SCALE_DATA"));
                 service.configure(ids.get(0),List.of(new SnapshotService.Config("SCALE_DATA",List.of("AUDIT_N"))));
                 long started=System.nanoTime();var job=service.start(new SnapshotService.Request(ids.get(0),ids.get(1),List.of("SCALE_DATA"),null),true);long deadline=started+java.util.concurrent.TimeUnit.MINUTES.toNanos(10);
                 while(service.job(job.id()).status().equals("RUNNING")&&System.nanoTime()<deadline)Thread.sleep(100);
