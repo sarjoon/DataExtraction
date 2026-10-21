@@ -24,12 +24,13 @@ public class RegistryService {
         return db.query("SELECT * FROM connection_profile WHERE database_type='ORACLE' OR (database_type='H2' AND connection_type IN ('FILE','MEMORY','TCP')) ORDER BY id", (r,n) -> new ConnectionProfile(
             r.getLong("id"),r.getString("name"),r.getString("database_type"),r.getString("host"),r.getObject("port")==null?9092:r.getInt("port"),
             r.getString("connection_type"),r.getString("database_name"),r.getString("jdbc_url"),r.getString("username"),
-            r.getString("schema_name"),r.getString("password_ciphertext") != null));
+            r.getString("schema_name"),r.getString("password_ciphertext") != null,r.getBoolean("read_only")));
     }
     public ConnectionProfile connection(long id) {
         return connections().stream().filter(c -> c.id()==id).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,"Connection not found."));
     }
+    public void requireWritable(long id){var profile=connection(id);if(profile.readOnly())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Connection '"+profile.name()+"' is read-only and cannot be used as a Snapshot destination. Enable writes in Database connections for the intended destination.");}
     public ConnectionProfile save(ConnectionInput input) {
         if ("ORACLE".equals(input.databaseType()) && (input.password() == null || input.password().isBlank())) throw new IllegalArgumentException("Password is required for a new Oracle connection.");
         String url = sourceUrl(input);
@@ -38,9 +39,9 @@ public class RegistryService {
         var keys=new GeneratedKeyHolder();
         try {
             db.update(c -> {
-                var p=c.prepareStatement("INSERT INTO connection_profile(name,jdbc_url,username,schema_name,database_type,host,port,connection_type,database_name,password_ciphertext) VALUES(?,?,?,?,?,?,?,?,?,?)",new String[]{"id"});
+                var p=c.prepareStatement("INSERT INTO connection_profile(name,jdbc_url,username,schema_name,database_type,host,port,connection_type,database_name,password_ciphertext,read_only) VALUES(?,?,?,?,?,?,?,?,?,?,?)",new String[]{"id"});
                 p.setString(1,input.name().trim());p.setString(2,url);p.setString(3,input.username().trim());p.setString(4,schema);
-                p.setString(5,input.databaseType());p.setString(6,input.host());p.setObject(7,input.port());p.setString(8,input.connectionType());p.setString(9,input.databaseName());p.setString(10,encrypted);return p;
+                p.setString(5,input.databaseType());p.setString(6,input.host());p.setObject(7,input.port());p.setString(8,input.connectionType());p.setString(9,input.databaseName());p.setString(10,encrypted);p.setBoolean(11,input.readOnly()==null||input.readOnly());return p;
             },keys);
         } catch (DuplicateKeyException e) { throw new IllegalArgumentException("A connection with that name already exists."); }
         return connection(Objects.requireNonNull(keys.getKey()).longValue());
@@ -52,8 +53,8 @@ public class RegistryService {
         String encrypted = input.password() == null || input.password().isBlank() ? storedPassword(id) : cipher.encrypt(input.password());
         String schema=connectionSchema(input,cipher.decrypt(encrypted));
         try {
-            db.update("UPDATE connection_profile SET name=?,jdbc_url=?,username=?,schema_name=?,host=?,port=?,connection_type=?,database_name=?,password_ciphertext=? WHERE id=?",
-                input.name().trim(),url,input.username().trim(),schema,input.host(),input.port(),input.connectionType(),input.databaseName(),encrypted,id);
+            db.update("UPDATE connection_profile SET name=?,jdbc_url=?,username=?,schema_name=?,host=?,port=?,connection_type=?,database_name=?,password_ciphertext=?,read_only=? WHERE id=?",
+                input.name().trim(),url,input.username().trim(),schema,input.host(),input.port(),input.connectionType(),input.databaseName(),encrypted,input.readOnly()==null?existing.readOnly():input.readOnly(),id);
         } catch (DuplicateKeyException e) {
             throw new IllegalArgumentException("A connection with that name already exists.");
         }

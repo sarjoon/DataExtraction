@@ -107,12 +107,14 @@ public class SnapshotService {
         if(a.equalsIgnoreCase(b)&&databases.schema(source,sourceId).equals(databases.schema(target,targetId)))throw new IllegalArgumentException("Source and target resolve to the same database and schema.");
     }
     public List<Map<String,Object>> inspect(Request request) throws SQLException {
+        registry.requireWritable(request.targetId());
         var configs=validate(request);var result=new ArrayList<Map<String,Object>>();
         try(var source=databases.open(request.sourceId());var target=databases.open(request.targetId())){different(source,request.sourceId(),target,request.targetId());
             for(var config:configs){var t=databases.describe(source,request.sourceId(),config.tableName());boolean exists=databases.exists(target,request.targetId(),t.name());long count=exists?count(target,databases.describe(target,request.targetId(),t.name())):0;result.add(Map.of("tableName",t.name(),"exists",exists,"recordCount",count));}}
         return result;
     }
     public synchronized Job start(Request request,boolean compare){
+        if(!compare)registry.requireWritable(request.targetId());
         List<Config> configs=validate(request);if(active!=null)throw new IllegalArgumentException("A Snapshot job is already running. Wait for it to finish.");
         if(!compare&&!Set.of("CREATE","APPEND","TRUNCATE").contains(Objects.toString(request.mode(),"")))throw new IllegalArgumentException("Choose truncate and import, or append and update duplicate keys.");
         String timestamp=DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss_SSS").format(LocalDateTime.now());
@@ -145,24 +147,26 @@ public class SnapshotService {
         if(!new HashSet<>(before.columns().stream().map(Column::name).toList()).equals(new HashSet<>(after.columns().stream().map(Column::name).toList())))throw new IllegalArgumentException("Column names differ for "+before.name());
     }
     private void capture(String id,Request request,List<Config> configs,Batch selectedBatch) throws SQLException {
+        registry.requireWritable(request.targetId());
         try(var source=databases.open(request.sourceId());var target=databases.open(request.targetId())){
             different(source,request.sourceId(),target,request.targetId());boolean oracle=registry.connection(request.targetId()).databaseType().equals("ORACLE");
             // Validate every table before the first destination mutation.
             for(var config:configs){var table=databases.describe(source,request.sourceId(),config.tableName());for(var col:table.columns())ddlType(col,oracle);
                 if(databases.exists(target,request.targetId(),table.name())){var dest=databases.describe(target,request.targetId(),table.name());compatible(table,dest);if("CREATE".equals(request.mode())&&count(target,dest)>0)throw new IllegalArgumentException("Destination now contains data. Inspect again and choose truncate or append.");}}
             // Oracle DDL commits implicitly. Finish all table creation before changing any data.
-            for(var config:configs)if(!databases.exists(target,request.targetId(),config.tableName()))create(target,databases.schema(target,request.targetId()),databases.describe(source,request.sourceId(),config.tableName()),oracle);
+            for(var config:configs){registry.requireWritable(request.targetId());if(!databases.exists(target,request.targetId(),config.tableName()))create(target,databases.schema(target,request.targetId()),databases.describe(source,request.sourceId(),config.tableName()),oracle);}
             target.setAutoCommit(false);
             try{for(var config:configs){var table=databases.describe(source,request.sourceId(),config.tableName());
+                registry.requireWritable(request.targetId());
                 var dest=databases.describe(target,request.targetId(),table.name());
                 if("TRUNCATE".equals(request.mode()))try(var statement=target.createStatement()){statement.executeUpdate("DELETE FROM "+dest.sql());} // Transactional truncate-and-import semantics.
                 List<String> columns=table.columns().stream().map(Column::name).toList();
                 try(var read=source.prepareStatement("SELECT "+names(columns)+" FROM "+table.sql(),ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY);var write=target.prepareStatement(mergeSql(dest,columns,oracle))){
                     read.setFetchSize(BATCH);read.setQueryTimeout(300);write.setQueryTimeout(300);int batch=0;
-                    try(var rows=read.executeQuery()){while(rows.next()){for(int i=0;i<columns.size();i++)bind(write,i+1,dest.column(columns.get(i)),value(rows,i+1,table.columns().get(i)));write.addBatch();if(++batch==BATCH){write.executeBatch();progress(id,"Copying "+table.name(),batch);batch=0;}}}
-                    if(batch>0){write.executeBatch();progress(id,"Copying "+table.name(),batch);}
+                    try(var rows=read.executeQuery()){while(rows.next()){for(int i=0;i<columns.size();i++)bind(write,i+1,dest.column(columns.get(i)),value(rows,i+1,table.columns().get(i)));write.addBatch();if(++batch==BATCH){registry.requireWritable(request.targetId());write.executeBatch();progress(id,"Copying "+table.name(),batch);batch=0;}}}
+                    if(batch>0){registry.requireWritable(request.targetId());write.executeBatch();progress(id,"Copying "+table.name(),batch);}
                 }
-            }target.commit();}catch(Exception e){target.rollback();throw e;}
+            }registry.requireWritable(request.targetId());target.commit();}catch(Exception e){target.rollback();throw e;}
         }
         // A captured database can immediately be selected as Before, with the same exclusions.
         transactions.executeWithoutResult(status->{for(var config:configs){db.update("MERGE INTO snapshot_table_registry(connection_id,table_name) KEY(connection_id,table_name) VALUES(?,?)",request.targetId(),config.tableName());db.update("MERGE INTO snapshot_table(connection_id,table_name,ignored_columns) KEY(connection_id,table_name) VALUES(?,?,?)",request.targetId(),config.tableName(),encode(config.ignoredColumns()));}if(selectedBatch!=null)storeBatch(request.targetId(),new BatchInput(null,selectedBatch.name(),configs.stream().map(Config::tableName).toList()));});

@@ -8,7 +8,7 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
  Object.assign(report,{batch:{id:91,name:'Release checks',tables:['ITEMS']},id:'Release_checks_20261021_120000_001'});
  await page.route('**/api/**',async route=>{
   const request=route.request(),url=new URL(request.url()),path=url.pathname;let body:unknown={};
-  if(path==='/api/connections')body=[{id:1,name:'Before DB',databaseType:'H2',schema:'PUBLIC'},{id:2,name:'After DB',databaseType:'H2',schema:'PUBLIC'}];
+  if(path==='/api/connections')body=[{id:1,name:'Before DB',databaseType:'H2',schema:'PUBLIC',readOnly:true},{id:2,name:'After DB',databaseType:'H2',schema:'PUBLIC',readOnly:false},{id:3,name:'Protected DB',databaseType:'H2',schema:'PUBLIC',readOnly:true}];
   else if(path==='/api/status')body={status:'UP',database:'H2'};
   else if(path==='/api/csrf')body={};
   else if(path.endsWith('/tables'))body=[{id:7,connectionId:1,schema:'PUBLIC',name:'EDAC_ONLY',source:'DATABASE'}];
@@ -59,6 +59,7 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
  await page.getByRole('button',{name:'Create batch',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Snapshot batch saved'})).toBeVisible();
  await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Take snapshot',exact:true}).click();
+ await expect(page.getByRole('combobox',{name:'Destination connection',exact:true}).getByRole('option',{name:/Protected DB/})).toHaveJSProperty('disabled',true);
  await page.getByRole('combobox',{name:'Execution batch',exact:true}).selectOption({label:'Release checks (1 tables)'});
  await expect(page.getByRole('checkbox',{name:/ITEMS/})).toBeChecked();
  await expect(page.getByRole('checkbox',{name:/ITEMS/})).toBeDisabled();
@@ -67,6 +68,7 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
  await page.getByRole('radio',{name:'Append and update duplicate primary keys'}).check();await page.getByRole('button',{name:'Take snapshot',exact:true}).click();
  await expect(page.getByRole('status').filter({hasText:'Snapshot captured successfully'})).toBeVisible();expect(captured).toBe(true);
  await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Compare',exact:true}).click();
+ await expect(page.getByRole('combobox',{name:'After Modification',exact:true}).getByRole('option',{name:/Protected DB/})).toHaveJSProperty('disabled',false);
  await page.getByRole('combobox',{name:'Execution batch',exact:true}).selectOption({label:'Release checks (1 tables)'});await page.getByRole('button',{name:'Compare tables'}).click();
  await expect(page.getByRole('cell',{name:'Difference exists',exact:true})).toBeVisible();expect(compared).toBe(true);
  await expect(page.getByRole('img',{name:/499976 unchanged/})).toBeVisible();

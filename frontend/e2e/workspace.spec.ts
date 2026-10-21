@@ -5,6 +5,7 @@ test('saved Oracle configuration, encrypted credential editing and table lists',
  await expect(page.getByText('Configuration DB ready',{exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/overview.png',fullPage:true});
  await page.getByRole('link',{name:'Database connections'}).click();
+ await expect(page.getByRole('checkbox',{name:'Read-only connection',exact:true})).toBeChecked();
  const name=`Browser test ${Date.now()}`;
  await page.getByLabel('Connection name',{exact:true}).fill(name);
  await page.getByLabel('Host',{exact:true}).fill('127.0.0.1');
@@ -17,12 +18,17 @@ test('saved Oracle configuration, encrypted credential editing and table lists',
  await page.getByRole('button',{name:'Save connection',exact:true}).click();
  const saved=await (await saveResponse).json();
  expect(saved.databaseType).toBe('ORACLE');expect(saved.passwordSaved).toBe(true);
+ expect(saved.readOnly).toBe(true);
  expect(JSON.stringify(saved)).not.toContain('browser-test-secret');
  await expect(page.getByRole('heading',{name:`Test ${name}`})).toBeVisible();
  await expect(page.getByLabel('Oracle password',{exact:true})).toHaveValue('');
  await page.getByRole('button',{name:'Edit connection',exact:true}).click();
+ await expect(page.getByRole('checkbox',{name:'Read-only connection',exact:true})).toBeChecked();
+ await page.getByRole('checkbox',{name:'Read-only connection',exact:true}).uncheck();
  await page.getByRole('combobox',{name:'Connection type',exact:true}).selectOption('SID');
+ const accessUpdate=page.waitForResponse(r=>r.url().endsWith('/api/connections/'+saved.id)&&r.request().method()==='POST');
  await page.getByRole('button',{name:'Update connection',exact:true}).click();
+ expect((await (await accessUpdate).json()).readOnly).toBe(false);
  await expect(page.getByText('jdbc:oracle:thin:@127.0.0.1:1:TEST_ONLY',{exact:false})).toBeVisible();
  await page.getByRole('button',{name:'Test connection',exact:true}).click();
  // No Oracle instance is configured in this test: report failure, never fall back to H2.

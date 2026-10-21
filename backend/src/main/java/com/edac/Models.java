@@ -14,12 +14,15 @@ public final class Models {
         @NotBlank @Pattern(regexp="[A-Za-z0-9_][A-Za-z0-9_.$#-]{0,127}") String databaseName,
         @NotBlank @Size(max=100) String username,
         @Pattern(regexp="(?:[A-Za-z_][A-Za-z0-9_$#]{0,127})?") String schema,
-        @Size(max=500) String password) {
+        @Size(max=500) String password,Boolean readOnly) {
+        public ConnectionInput(String name,String databaseType,String host,Integer port,String connectionType,String databaseName,String username,String schema,String password){this(name,databaseType,host,port,connectionType,databaseName,username,schema,password,null);}
         @Override public String toString() { return "ConnectionInput[password=REDACTED]"; }
     }
     public record ConnectionProfile(long id, String name, String databaseType, String host, int port,
         String connectionType, String databaseName, String jdbcUrl, String username, String schema,
-        boolean passwordSaved) {}
+        boolean passwordSaved,boolean readOnly) {
+        public ConnectionProfile(long id,String name,String databaseType,String host,int port,String connectionType,String databaseName,String jdbcUrl,String username,String schema,boolean passwordSaved){this(id,name,databaseType,host,port,connectionType,databaseName,jdbcUrl,username,schema,passwordSaved,true);}
+    }
     public record TableEntry(long id, long connectionId, String schema, String name, String source, String createdAt) {}
     public record ColumnDetail(int position, String name, String dataType, Number byteLength, Number characterLength,
         Integer precision, Integer scale, boolean nullable, boolean included) {

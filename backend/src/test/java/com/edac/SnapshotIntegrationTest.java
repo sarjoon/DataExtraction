@@ -26,9 +26,10 @@ class SnapshotIntegrationTest {
     @TempDir static Path directory;
     @DynamicPropertySource static void settings(DynamicPropertyRegistry registry){registry.add("edac.snapshot.directory",()->directory.toString());}
     @Autowired SnapshotService service;@Autowired SnapshotReports reports;@Autowired SnapshotDatabase databases;@Autowired RegistryService registry;@Autowired ObjectMapper json;@Autowired MockMvc mvc;
-    long connection(String database){return registry.save(new Models.ConnectionInput("Snapshot "+UUID.randomUUID(),"H2","localhost",9092,"MEMORY",database,"sa","","")).id();}
+    long connection(String database){return registry.save(new Models.ConnectionInput("Snapshot "+UUID.randomUUID(),"H2","localhost",9092,"MEMORY",database,"sa","","",false)).id();}
     List<SnapshotService.Config> configure(long connection,List<SnapshotService.Config> configs) throws SQLException {service.registerTables(connection,configs.stream().map(SnapshotService.Config::tableName).toList());return service.configure(connection,configs);}
     String database(){return "snapshot_"+UUID.randomUUID().toString().replace("-","");}
+    void access(long id,Boolean readOnly){var p=registry.connection(id);registry.update(id,new Models.ConnectionInput(p.name(),p.databaseType(),p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),p.schema(),"",readOnly));}
     SnapshotService.Job await(SnapshotService.Job job) throws Exception {
         long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(90);
         while(service.job(job.id()).status().equals("RUNNING")&&System.nanoTime()<deadline)Thread.sleep(25);
@@ -61,7 +62,14 @@ class SnapshotIntegrationTest {
         assertThat(reports.history()).anyMatch(r->r.get("id").equals(job.id()));
         Path zip=reports.zip(job.id());assertThat(zip.getFileName().toString()).isEqualTo(job.id()+".zip");assertThat(directory.resolve("snapshot/json/"+job.id()+".json")).exists();
         try(var entries=new ZipFile(zip.toFile())){assertThat(entries.size()).isEqualTo(1);var entry=entries.entries().nextElement();assertThat(entry.getName()).isEqualTo("ITEMS_"+report.get("timestamp")+".xlsx");
-            try(var book=new XSSFWorkbook(entries.getInputStream(entry))){assertThat(book.getNumberOfSheets()).isEqualTo(4);assertThat(book.getSheetName(0)).isEqualTo("Summary");assertThat(book.getSheet("Records Only Before").getLastRowNum()).isEqualTo(2);assertThat(book.getSheet("Differences").getLastRowNum()).isEqualTo(2);}}
+            try(var book=new XSSFWorkbook(entries.getInputStream(entry))){
+                assertThat(book.getNumberOfSheets()).isEqualTo(4);assertThat(book.getSheetName(0)).isEqualTo("Summary");assertThat(book.getSheet("Records Only Before").getLastRowNum()).isEqualTo(2);
+                var differences=book.getSheet("Differences");assertThat(differences.getLastRowNum()).isEqualTo(3);
+                var headers=new ArrayList<String>();differences.getRow(0).forEach(cell->headers.add(cell.getStringCellValue()));
+                assertThat(headers).containsExactly("ID","PART","Column Name","Before","After");
+                var changes=new ArrayList<List<String>>();for(int i=1;i<=differences.getLastRowNum();i++){var values=new ArrayList<String>();differences.getRow(i).forEach(cell->values.add(cell.getStringCellValue()));changes.add(values);}
+                assertThat(changes).containsExactlyInAnyOrder(List.of("3","A","AMOUNT","0.3","99.9"),List.of("3","A","NOTE","name3","changed"),List.of("5","A","NOTE","name5","<NULL>"));
+            }}
         mvc.perform(get("/api/snapshot/reports/"+job.id()+"/ITEMS/beforeOnly")).andExpect(status().isOk()).andExpect(jsonPath("$.size").value(10)).andExpect(jsonPath("$.rows.length()").value(2));
         mvc.perform(post("/api/snapshot/capture").contentType("application/json").content(json.writeValueAsString(capture))).andExpect(status().isForbidden());
         // Append restores deleted records, updates existing keys, and retains target-only rows.
@@ -127,6 +135,27 @@ class SnapshotIntegrationTest {
         service.saveBatch(first,new SnapshotService.BatchInput(batch.id(),"Renamed",names));service.removeBatch(first,batch.id());
         assertThat(((Map<?,?>)reports.summary(job.id()).get("batch")).get("name")).isEqualTo("Release checks");assertThat(service.registeredTables(first)).hasSize(4);
         mvc.perform(post("/api/snapshot/batches/"+first).contentType("application/json").content("{}")).andExpect(status().isForbidden());
+    }
+    @Test void readOnlyConnectionsRejectEveryCaptureModeBeforeAnyDestinationChanges() throws Exception {
+        long source=connection(database()),target=connection(database());
+        try(var c=databases.open(source);var s=c.createStatement()){s.execute("CREATE TABLE PROTECTED_TABLE(ID INT PRIMARY KEY)");s.execute("INSERT INTO PROTECTED_TABLE VALUES(1)");s.execute("CREATE TABLE NEW_TABLE(ID INT PRIMARY KEY)");}
+        try(var c=databases.open(target);var s=c.createStatement()){s.execute("CREATE TABLE PROTECTED_TABLE(ID INT PRIMARY KEY)");s.execute("INSERT INTO PROTECTED_TABLE VALUES(99)");}
+        configure(source,List.of(new SnapshotService.Config("PROTECTED_TABLE",List.of()),new SnapshotService.Config("NEW_TABLE",List.of())));
+        access(source,true);access(target,true);
+        for(String mode:List.of("CREATE","APPEND","TRUNCATE")){
+            var request=new SnapshotService.Request(source,target,List.of("PROTECTED_TABLE","NEW_TABLE"),mode);
+            assertThatThrownBy(()->service.start(request,false)).isInstanceOf(org.springframework.web.server.ResponseStatusException.class).hasMessageContaining("read-only");
+            mvc.perform(post("/api/snapshot/capture").with(csrf()).contentType("application/json").content(json.writeValueAsString(request))).andExpect(status().isForbidden()).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("read-only")));
+        }
+        assertThatThrownBy(()->service.inspect(new SnapshotService.Request(source,target,List.of("PROTECTED_TABLE"),"TRUNCATE"))).hasMessageContaining("read-only");
+        try(var c=databases.open(target);var s=c.createStatement();var r=s.executeQuery("SELECT ID FROM PROTECTED_TABLE")){assertThat(r.next()).isTrue();assertThat(r.getInt(1)).isEqualTo(99);assertThat(r.next()).isFalse();assertThat(databases.exists(c,target,"NEW_TABLE")).isFalse();}
+        // Both comparison sides may be read-only; capturing from a read-only source is also valid.
+        success(service.start(new SnapshotService.Request(source,target,List.of("PROTECTED_TABLE"),null),true));
+        access(target,false);access(target,null);assertThat(registry.connection(target).readOnly()).isFalse();
+        success(service.start(new SnapshotService.Request(source,target,List.of("PROTECTED_TABLE","NEW_TABLE"),"TRUNCATE"),false));
+        assertThat(registry.connection(source).readOnly()).isTrue();
+        access(target,true);access(target,null);assertThat(registry.connection(target).readOnly()).isTrue();
+        var defaultProfile=registry.save(new Models.ConnectionInput("Default readonly "+UUID.randomUUID(),"H2",null,null,"MEMORY",database(),"sa","PUBLIC",""));assertThat(defaultProfile.readOnly()).isTrue();
     }
     @Test void rollsBackDestinationRowsWhenTruncateImportFails() throws Exception {
         long first=connection(database()),second=connection(database());

@@ -22,7 +22,7 @@ class SnapshotScaleTest {
             Flyway.configure().dataSource(pool).load().migrate();var db=new JdbcTemplate(pool);
             var cipher=mock(CredentialCipher.class);when(cipher.encrypt(anyString())).thenAnswer(c->c.getArgument(0));when(cipher.decrypt(anyString())).thenAnswer(c->c.getArgument(0));
             var oracle=new OracleConnectionFactory();var registry=new RegistryService(db,cipher,new OracleSource(oracle),new H2Source());var databases=new SnapshotDatabase(registry,db,cipher,oracle);var json=new ObjectMapper();var reports=new SnapshotReports(db,json,directory.toString());var service=new SnapshotService(db,registry,databases,reports,json);
-            var ids=new ArrayList<Long>();for(int i=0;i<2;i++){String name="scale_"+UUID.randomUUID().toString().replace("-","");ids.add(registry.save(new Models.ConnectionInput(name,"H2","localhost",9092,"MEMORY",name,"sa","PUBLIC","")).id());}
+            var ids=new ArrayList<Long>();for(int i=0;i<2;i++){String name="scale_"+UUID.randomUUID().toString().replace("-","");ids.add(registry.save(new Models.ConnectionInput(name,"H2","localhost",9092,"MEMORY",name,"sa","PUBLIC","",false)).id());}
             try{
                 for(long id:ids)try(var c=databases.open(id);var s=c.createStatement()){s.execute("CREATE TABLE SCALE_DATA(ID BIGINT PRIMARY KEY,VALUE_N DECIMAL(14,2),AUDIT_N INT)");s.execute("INSERT INTO SCALE_DATA SELECT X,X/10.0,0 FROM SYSTEM_RANGE(1,500000)");}
                 try(var c=databases.open(ids.get(1));var s=c.createStatement()){s.execute("DELETE FROM SCALE_DATA WHERE ID=1");s.execute("INSERT INTO SCALE_DATA VALUES(500001,1,0)");s.execute("UPDATE SCALE_DATA SET VALUE_N=99 WHERE ID=3");s.execute("UPDATE SCALE_DATA SET AUDIT_N=1");}

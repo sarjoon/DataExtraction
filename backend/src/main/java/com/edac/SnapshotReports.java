@@ -66,19 +66,23 @@ public class SnapshotReports {
             for(var e:metadata.entrySet())writeRow(summary,line++,List.of(e.getKey(),String.valueOf(e.getValue())));
             for(var e:table.entrySet())writeRow(summary,line++,List.of(e.getKey(),String.valueOf(e.getValue())));
             var before=book.createSheet("Records Only Before");var after=book.createSheet("Records Only After");var differences=book.createSheet("Differences");
-            List<String> columns=(List<String>)table.get("columns"),keys=(List<String>)table.get("primaryKeys"),compared=(List<String>)table.get("comparedColumns");
-            if(compared.size()*2+keys.size()>16384)throw new IllegalArgumentException("Too many columns for the Excel differences sheet.");
+            List<String> columns=(List<String>)table.get("columns"),keys=(List<String>)table.get("primaryKeys");
+            if(keys.size()+3>16384)throw new IllegalArgumentException("Too many primary-key columns for the Excel differences sheet.");
             writeRow(before,0,columns);writeRow(after,0,columns);
-            var headers=new ArrayList<>(keys);for(String col:compared){headers.add(col+" Before");headers.add(col+" After");}writeRow(differences,0,headers);
+            var headers=new ArrayList<>(keys);headers.addAll(List.of("Column Name","Before","After"));writeRow(differences,0,headers);
             String name=(String)table.get("tableName");
             for(String category:CATEGORIES){Sheet sheet=category.equals("beforeOnly")?before:category.equals("afterOnly")?after:differences;int[] index={1};
                 rows(run,name,category,row->{
-                    if(index[0]>=1048576)throw new IllegalArgumentException("Excel row limit exceeded for "+name+". Compare a smaller table.");
-                    var values=new ArrayList<String>();
-                    if(!category.equals("differences")){for(String col:columns)values.add(display(row.path("values").get(col)));}
-                    else{for(String key:keys)values.add(display(row.path("primaryKey").get(key)));var changes=new HashMap<String,JsonNode>();row.path("changes").forEach(c->changes.put(c.path("column").asText(),c));
-                        for(String col:compared){var change=changes.get(col);values.add(change==null?"":display(change.get("before")));values.add(change==null?"":display(change.get("after")));}}
-                    writeRow(sheet,index[0]++,values);
+                    if(!category.equals("differences")){
+                        if(index[0]>=1048576)throw new IllegalArgumentException("Excel row limit exceeded for "+name+". Compare a smaller table.");
+                        var values=new ArrayList<String>();for(String col:columns)values.add(display(row.path("values").get(col)));
+                        writeRow(sheet,index[0]++,values);
+                    }else for(var change:row.path("changes")){
+                        if(index[0]>=1048576)throw new IllegalArgumentException("Excel row limit exceeded for "+name+". Compare a smaller table.");
+                        var values=new ArrayList<String>();for(String key:keys)values.add(display(row.path("primaryKey").get(key)));
+                        values.add(change.path("column").asText());values.add(display(change.get("before")));values.add(display(change.get("after")));
+                        writeRow(sheet,index[0]++,values);
+                    }
                 });
             }
             for(Sheet sheet:book){int width=sheet==summary?2:sheet==differences?headers.size():columns.size();sheet.createFreezePane(0,1);for(int i=0;i<width;i++)sheet.setColumnWidth(i,24*256);if(sheet!=summary)sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0,Math.max(0,sheet.getLastRowNum()),0,width-1));}
