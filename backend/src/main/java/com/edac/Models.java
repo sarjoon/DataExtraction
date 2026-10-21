@@ -14,7 +14,8 @@ public final class Models {
         @NotBlank @Pattern(regexp="[A-Za-z0-9_][A-Za-z0-9_.$#-]{0,127}") String databaseName,
         @NotBlank @Size(max=100) String username,
         @Pattern(regexp="(?:[A-Za-z_][A-Za-z0-9_$#]{0,127})?") String schema,
-        @Size(max=500) String password,Boolean readOnly) {
+        @Size(max=500) String password,Boolean readOnly,Boolean useBlankPassword) {
+        public ConnectionInput(String name,String databaseType,String host,Integer port,String connectionType,String databaseName,String username,String schema,String password,Boolean readOnly){this(name,databaseType,host,port,connectionType,databaseName,username,schema,password,readOnly,null);}
         public ConnectionInput(String name,String databaseType,String host,Integer port,String connectionType,String databaseName,String username,String schema,String password){this(name,databaseType,host,port,connectionType,databaseName,username,schema,password,null);}
         @Override public String toString() { return "ConnectionInput[password=REDACTED]"; }
     }

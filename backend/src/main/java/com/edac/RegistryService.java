@@ -32,10 +32,12 @@ public class RegistryService {
     }
     public void requireWritable(long id){var profile=connection(id);if(profile.readOnly())throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Connection '"+profile.name()+"' is read-only and cannot be used as a Snapshot destination. Enable writes in Database connections for the intended destination.");}
     public ConnectionProfile save(ConnectionInput input) {
+        validateBlankPassword(input);
         if ("ORACLE".equals(input.databaseType()) && (input.password() == null || input.password().isBlank())) throw new IllegalArgumentException("Password is required for a new Oracle connection.");
         String url = sourceUrl(input);
-        String encrypted = cipher.encrypt(input.password()==null?"":input.password());
-        String schema=connectionSchema(input,input.password()==null?"":input.password());
+        String password=Boolean.TRUE.equals(input.useBlankPassword())?"":Objects.toString(input.password(),"");
+        String encrypted = cipher.encrypt(password);
+        String schema=connectionSchema(input,password);
         var keys=new GeneratedKeyHolder();
         try {
             db.update(c -> {
@@ -47,11 +49,12 @@ public class RegistryService {
         return connection(Objects.requireNonNull(keys.getKey()).longValue());
     }
     public ConnectionProfile update(long id, ConnectionInput input) {
+        validateBlankPassword(input);
         var existing=connection(id);
         if(!existing.databaseType().equals(input.databaseType())) throw new IllegalArgumentException("Create a new profile to change database type.");
         String url = sourceUrl(input);
-        String encrypted = input.password() == null || input.password().isBlank() ? storedPassword(id) : cipher.encrypt(input.password());
-        String schema=connectionSchema(input,cipher.decrypt(encrypted));
+        String encrypted = Boolean.TRUE.equals(input.useBlankPassword()) ? cipher.encrypt("") : input.password() == null || input.password().isBlank() ? storedPassword(id) : cipher.encrypt(input.password());
+        String schema=connectionSchema(input,Boolean.TRUE.equals(input.useBlankPassword())?"":cipher.decrypt(encrypted));
         try {
             db.update("UPDATE connection_profile SET name=?,jdbc_url=?,username=?,schema_name=?,host=?,port=?,connection_type=?,database_name=?,password_ciphertext=?,read_only=? WHERE id=?",
                 input.name().trim(),url,input.username().trim(),schema,input.host(),input.port(),input.connectionType(),input.databaseName(),encrypted,input.readOnly()==null?existing.readOnly():input.readOnly(),id);
@@ -59,6 +62,9 @@ public class RegistryService {
             throw new IllegalArgumentException("A connection with that name already exists.");
         }
         return connection(id);
+    }
+    private static void validateBlankPassword(ConnectionInput input){
+        if(Boolean.TRUE.equals(input.useBlankPassword())&&(!"H2".equals(input.databaseType())||(input.password()!=null&&!input.password().isEmpty())))throw new IllegalArgumentException("Use blank password is only available for H2 with an empty password field.");
     }
     private String storedPassword(long id) {
         return db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id);

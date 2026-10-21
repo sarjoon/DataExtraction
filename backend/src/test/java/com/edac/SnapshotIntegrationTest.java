@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:snapshot_tests;DB_CLOSE_DELAY=-1","spring.datasource.password="})
 @AutoConfigureMockMvc @ActiveProfiles("local")
 class SnapshotIntegrationTest {
+    @Autowired org.springframework.jdbc.core.JdbcTemplate configDb;
     @TempDir static Path directory;
     @DynamicPropertySource static void settings(DynamicPropertyRegistry registry){registry.add("edac.snapshot.directory",()->directory.toString());}
     @Autowired SnapshotService service;@Autowired SnapshotReports reports;@Autowired SnapshotDatabase databases;@Autowired RegistryService registry;@Autowired ObjectMapper json;@Autowired MockMvc mvc;
@@ -156,6 +157,16 @@ class SnapshotIntegrationTest {
         assertThat(registry.connection(source).readOnly()).isTrue();
         access(target,true);access(target,null);assertThat(registry.connection(target).readOnly()).isTrue();
         var defaultProfile=registry.save(new Models.ConnectionInput("Default readonly "+UUID.randomUUID(),"H2",null,null,"MEMORY",database(),"sa","PUBLIC",""));assertThat(defaultProfile.readOnly()).isTrue();
+    }
+    @Test void explicitlyResetsUnreadableH2CredentialToEmptyAndPreservesItOnLaterEdits() throws Exception {
+        long id=connection(database());var p=registry.connection(id);
+        configDb.update("UPDATE connection_profile SET password_ciphertext='v1:unreadable' WHERE id=?",id);
+        assertThatThrownBy(()->registry.update(id,new Models.ConnectionInput(p.name(),"H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),p.schema(),"",null))).hasMessageContaining("Cannot decrypt");
+        registry.update(id,new Models.ConnectionInput(p.name(),"H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),"","",null,true));
+        assertThat(registry.test(id).connected()).isTrue();
+        registry.update(id,new Models.ConnectionInput(p.name()+" edited","H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),p.schema(),"",null));
+        assertThat(registry.test(id).connected()).isTrue();
+        assertThatThrownBy(()->registry.update(id,new Models.ConnectionInput(p.name(),"H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),p.schema(),"secret",null,true))).hasMessageContaining("empty password field");
     }
     @Test void rollsBackDestinationRowsWhenTruncateImportFails() throws Exception {
         long first=connection(database()),second=connection(database());
