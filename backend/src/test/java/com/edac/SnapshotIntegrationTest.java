@@ -168,6 +168,22 @@ class SnapshotIntegrationTest {
         assertThat(registry.test(id).connected()).isTrue();
         assertThatThrownBy(()->registry.update(id,new Models.ConnectionInput(p.name(),"H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),p.schema(),"secret",null,true))).hasMessageContaining("empty password field");
     }
+    @Test void inspectionIdentifiesUnreadableSourceOrDestinationAndSucceedsAfterBlankPasswordReset() throws Exception {
+        long source=connection(database()),target=connection(database());
+        try(var c=databases.open(source);var s=c.createStatement()){s.execute("CREATE TABLE INSPECT_CREDENTIALS(ID INT PRIMARY KEY)");}
+        configure(source,List.of(new SnapshotService.Config("INSPECT_CREDENTIALS",List.of())));
+        var request=new SnapshotService.Request(source,target,List.of("INSPECT_CREDENTIALS"),"CREATE");
+        for(long id:List.of(source,target)){
+            var profile=registry.connection(id);
+            configDb.update("UPDATE connection_profile SET password_ciphertext='v1:unreadable' WHERE id=?",id);
+            long other=id==source?target:source;assertThat(registry.test(other).connected()).isTrue();
+            assertThatThrownBy(()->service.inspect(request)).hasMessageContaining(profile.name()).hasMessageContaining("Use blank password");
+            registry.update(id,new Models.ConnectionInput(profile.name(),"H2",profile.host(),profile.port(),profile.connectionType(),profile.databaseName(),profile.username(),profile.schema(),"",null,true));
+            assertThat(registry.test(id).connected()).isTrue();
+            assertThat(service.inspect(request)).singleElement().satisfies(row->assertThat(row).containsEntry("exists",false));
+        }
+        success(service.start(request,false));
+    }
     @Test void rollsBackDestinationRowsWhenTruncateImportFails() throws Exception {
         long first=connection(database()),second=connection(database());
         try(var c=databases.open(first);var s=c.createStatement()){s.execute("CREATE TABLE LIMITED_TABLE(ID INT PRIMARY KEY,NOTE VARCHAR(100))");s.execute("INSERT INTO LIMITED_TABLE VALUES(1,'too long for destination')");}

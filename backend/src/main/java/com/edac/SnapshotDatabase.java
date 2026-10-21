@@ -17,7 +17,7 @@ public class SnapshotDatabase {
     private final RegistryService registry;private final JdbcTemplate db;private final CredentialCipher cipher;private final OracleConnectionFactory oracle;
     public SnapshotDatabase(RegistryService registry,JdbcTemplate db,CredentialCipher cipher,OracleConnectionFactory oracle){this.registry=registry;this.db=db;this.cipher=cipher;this.oracle=oracle;}
     public Connection open(long id) throws SQLException {
-        var p=registry.connection(id);String password=cipher.decrypt(db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id));
+        var p=registry.connection(id);String password=registry.connectionPassword(id);
         if("ORACLE".equals(p.databaseType()))return oracle.open(p,password);
         var connection=DriverManager.getConnection(H2Source.url(p.host(),p.port(),p.connectionType(),p.databaseName()),p.username(),password);
         try(var statement=connection.createStatement()){statement.execute("SET LAZY_QUERY_EXECUTION TRUE");return connection;}catch(SQLException e){connection.close();throw e;}

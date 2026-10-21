@@ -69,9 +69,15 @@ public class RegistryService {
     private String storedPassword(long id) {
         return db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id);
     }
+    public String connectionPassword(long id) {
+        var profile=connection(id);
+        try{return cipher.decrypt(storedPassword(id));}
+        catch(IllegalArgumentException e){throw new IllegalArgumentException("Cannot decrypt the saved password for connection '"+profile.name()+"' (ID "+id+"). "+("H2".equals(profile.databaseType())?"If this database has no password, edit this connection, select Use blank password and save. Otherwise restore the original encryption key or enter and save its password.":"Restore the original encryption key or enter and save its password."));}
+    }
     public TestResult test(long id) {
         var profile = connection(id);
-        return "H2".equals(profile.databaseType())?h2.test(profile,cipher.decrypt(storedPassword(id))):oracle.test(profile,cipher.decrypt(storedPassword(id)));
+        String password=connectionPassword(id);
+        return "H2".equals(profile.databaseType())?h2.test(profile,password):oracle.test(profile,password);
     }
     public List<TableName> discover(long id) {
         var profile = connection(id);
