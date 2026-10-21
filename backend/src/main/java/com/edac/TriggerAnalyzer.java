@@ -15,7 +15,7 @@ public class TriggerAnalyzer {
     // Consume literals and comments as whole tokens; only identifiers become candidate fields.
     private static final Pattern SOURCE_TOKEN=Pattern.compile(
         "\"(?:\\\\.|\"\"|[^\"\\\\])*\"|'(?:\\\\.|''|[^'\\\\])*'|\\{[^}]*\\}"
-        +"|\\\\[nr]|\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b|(?<field>"+IDENTIFIER+")");
+        +"|\\\\[nr]|\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b|(?<field>"+IDENTIFIER+")|(?<delimiter>[(),])");
     private static final Set<String> CONSTANTS=Set.of("IF","THEN","ELSE","END","CASE","WHEN","AND","OR","NOT","NULL","TRUE","FALSE","IS","IN","LIKE","BETWEEN");
     private final OracleConnectionFactory connections;
     private final ReadableFieldService readable;
@@ -76,14 +76,27 @@ public class TriggerAnalyzer {
         String script=singleLine(withoutComments(definition));
         var matcher=SOURCE_TOKEN.matcher(script);
         Map<String,String> fields=new LinkedHashMap<>();
+        // Each IF's first argument is a condition, including expressions in nested calls.
+        Deque<Boolean> arguments=new ArrayDeque<>();int conditions=0;boolean pendingIf=false;
         while(matcher.find()) {
-            String field=matcher.group("field");if(field==null)continue;
+            String delimiter=matcher.group("delimiter");
+            if(delimiter!=null) {
+                if(delimiter.equals("(")){arguments.push(pendingIf);if(pendingIf)conditions++;}
+                else if(!arguments.isEmpty()) {
+                    boolean condition=arguments.pop();if(condition)conditions--;
+                    if(delimiter.equals(","))arguments.push(false);
+                }
+                pendingIf=false;continue;
+            }
+            String field=matcher.group("field");if(field==null){pendingIf=false;continue;}
             field=field.replaceAll("\\s+","");
             int next=matcher.end();while(next<script.length() && Character.isWhitespace(script.charAt(next)))next++;
-            // A bare '=' (or ':=') assigns this identifier; comparisons keep their operands.
-            if(next<script.length() && script.charAt(next)=='=' && (next+1>=script.length() || script.charAt(next+1)!='='))continue;
-            if(next+1<script.length() && script.charAt(next)==':' && script.charAt(next+1)=='=')continue;
+            pendingIf=field.equalsIgnoreCase("IF") && next<script.length() && script.charAt(next)=='(';
             int previous=matcher.start()-1;while(previous>=0 && Character.isWhitespace(script.charAt(previous)))previous--;
+            // '=' compares in IF conditions; elsewhere it assigns. '&name=' remains a named argument.
+            if(next<script.length() && script.charAt(next)=='=' && (next+1>=script.length() || script.charAt(next+1)!='=')
+                && (conditions==0 || previous>=0 && script.charAt(previous)=='&'))continue;
+            if(next+1<script.length() && script.charAt(next)==':' && script.charAt(next+1)=='=')continue;
             if(previous>=0 && script.charAt(previous)=='.')continue; // e.g. GET_OBJECT(...).id
             if(next<script.length() && script.charAt(next)=='(' && !field.contains("."))continue;
             if(CONSTANTS.contains(field.toUpperCase(Locale.ROOT)) || field.equals(field.toUpperCase(Locale.ROOT)))continue;

@@ -39,9 +39,28 @@ class TriggerAnalyzerTest {
     }
     @Test void ignoresQuotedStringsNumbersAndConstantsAndDeduplicatesCaseInsensitively() {
         assertThat(TriggerAnalyzer.extract("IF (amount > 1.2e-3 AND flag = TRUE, CUSTOM_FUNCTION('don''t use hidden_field', \"hidden_id\", currency_code), AMOUNT)"))
-            .isEqualTo("amount\ncurrency_code");
+            .isEqualTo("amount\nflag\ncurrency_code");
         assertThat(TriggerAnalyzer.extract("IF(ud_spread <> NULL, other_field, UD_SPREAD)","ud_spread")).isEqualTo("ud_spread\nother_field");
         assertThat(TriggerAnalyzer.extract("DATEADD(value_d, month, 1)")).isEqualTo("value_d\nmonth");
+    }
+    @Test void includesConditionsFromEveryIfInTheRequestedRepaymentRule() {
+        String rule="""
+            IF(ud_prepymt_repymt_e=1 AND ud_waive_ind_f = 0 , ud_old_quantity_n+ud_int_to_date_m+ud_penalty_cost_m,
+            IF(ud_prepymt_repymt_e=1 AND ud_waive_ind_f = 1 , ud_old_quantity_n+ud_int_to_date_m+ud_penalty_cost_m-ud_waived_amount_m,
+            IF(ud_prepymt_repymt_e=2,ud_
+            old_quantity_n+ud_int_to_date_m,NULL)))
+            """;
+        assertThat(TriggerAnalyzer.extract(rule)).isEqualTo("ud_prepymt_repymt_e\nud_waive_ind_f\nud_old_quantity_n\nud_int_to_date_m\nud_penalty_cost_m\nud_waived_amount_m");
+    }
+    @Test void includesBothConditionOperandsButExcludesNumbersAndQuotedValues() {
+        assertThat(TriggerAnalyzer.extract("IF(left_field = right_field AND amount >= -1.25 AND code = \"fixed, ignored_field=1\" AND other_code <> 'text', result_field, NULL)"))
+            .isEqualTo("left_field\nright_field\namount\ncode\nother_code\nresult_field");
+    }
+    @Test void respectsNestedCallCommasAndKeepsAssignmentsOutsideIfConditionsExcluded() {
+        assertThat(TriggerAnalyzer.extract("target = IF(CHECK(left_field = right_field, another_field = 2) AND (flag = 1), branch_target = source_field, IF(other_flag = 0, second_target := second_source, 0))"))
+            .isEqualTo("left_field\nright_field\nanother_field\nflag\nsource_field\nother_flag\nsecond_source");
+        assertThat(TriggerAnalyzer.extract("IF(GET_OBJECT(\"kind\", &named_arg=lookup_field).id = comparison_field, result_field, NULL)"))
+            .isEqualTo("lookup_field\ncomparison_field\nresult_field");
     }
     @Test void normalizesWhitespaceInDottedPaths() {
         assertThat(TriggerAnalyzer.extract("portfolio_id . code + portfolio_id.\ncode")).isEqualTo("portfolio_id.code");
