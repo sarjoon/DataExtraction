@@ -39,3 +39,13 @@ IF(instr_id.ref_curr_id.code IN("IDR", "JPY"), ROUND((quantity_n * ud_client_rat
 STRNUM(NOTEPAD("currency",instr_id.ref_curr_id.code,SYSDATE(),,"UOB_INTEREST_BASIS").title_c), 1, 2), ROUND((quantity_n * ud_client_
 rate_n * DATEDIFF(value_d,expiration_d,DAY))/
 STRNUM(NOTEPAD("currency",instr_id.ref_curr_id.code,SYSDATE(),,"UOB_INTEREST_BASIS").title_c), 0.01, 2))
+
+
+
+
+
+
+IF(ud_prepymt_repymt_e=1 AND ud_waive_ind_f = 0 , ud_old_quantity_n+ud_int_to_date_m+ud_penalty_cost_m,
+IF(ud_prepymt_repymt_e=1 AND ud_waive_ind_f = 1 , ud_old_quantity_n+ud_int_to_date_m+ud_penalty_cost_m-ud_waived_amount_m,
+IF(ud_prepymt_repymt_e=2,ud_
+old_quantity_n+ud_int_to_date_m,NULL)))
