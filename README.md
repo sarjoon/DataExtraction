@@ -9,6 +9,32 @@ Extraction Framework uses Angular and Spring Boot to prepare mapping workbooks a
 - Source database tables are never created or migrated by Flyway.
 - The user's table-structure query is still pending. The mapping screen previews standard source column metadata; custom Oracle field-extraction SQL and fixed-length file generation remain pending.
 
+## Snapshot
+
+The **Snapshot** main menu groups **Configuration**, **Take snapshot**, **Compare**, and **History**. Flyway V9 adds Snapshot configuration and disk-backed working tables to EDAC's configuration database. It does not modify source tables.
+
+1. Save Oracle or H2 connections for the source/before and destination/after databases. An omitted schema is resolved from the database's default schema when saving the connection; this requires a successful connection. An explicit schema can still be saved without connecting.
+2. In Snapshot Configuration, choose the source connection, enter a table name and load its columns. Save up to three tables per connection and select audit or other columns to ignore. Every table needs a declared primary key; composite primary keys are supported and cannot be ignored. Exclusions affect comparison, not the data copied into a snapshot.
+3. In Take snapshot, choose source, destination and tables, then inspect the destination. Missing tables are created with columns and the primary key. If data exists, choose **Append and update duplicate primary keys** or **Truncate existing data and import**. Truncate-and-import clears rows transactionally with DELETE, preserving the existing table definition and rolling back data changes if import fails. Newly created Oracle tables can remain empty after a failed import because Oracle commits DDL. Append leaves destination-only records in place. Successful capture also copies the selected table configuration and exclusions to the destination, so it can immediately be used as Before in a comparison. The destination retains a maximum of three configured tables. Copied structures include columns and primary keys, not source triggers, indexes, foreign keys, generated expressions or grants.
+4. In Compare, select Before and After connections and the configured tables. Names must match; schemas may differ. Only primary keys are staged initially, in an indexed H2 working table. Records are fetched and compared in batches of 200. The application runs one capture/comparison job at a time and shows its progress. Keep compared tables stable during a run; the multi-query comparison does not lock both databases into one shared point-in-time transaction.
+5. The completed dashboard includes a pie chart and a per-table result grid. Details provide Summary, Records Only in Before Modification, Records Only in After Modification and Differences. Grids start at 10 rows per page. Each differing primary key opens its changed columns with Before and After values side by side.
+
+Every completed comparison automatically writes a JSON report and an Excel ZIP, regardless of download. Each table has one workbook containing four sheets. Differences use one row per primary key, with paired Before/After columns; unchanged cells are blank. Numeric and primary-key values are exported as text to preserve precision. Binary values are Base64. JSON retains complete text; Excel values exceeding its 32,767-character cell limit carry an explicit truncation marker. Normal Excel row/column limits apply. Unquoted table and column names and common numeric, text, binary and date/time types are supported; unsupported types fail explicitly. Destination tables must permit explicit primary-key insertion and compatible values.
+
+Storage defaults to the directory containing the executable JAR (the current working directory for development). Override the base directory with a JVM argument:
+
+```powershell
+java '-Dedac.snapshot.directory=D:\Snapshot Reports' -jar target/edac-backend-0.1.0-snapshot.jar
+```
+
+Reports are stored under `<base>/snapshot/json` and `<base>/snapshot/zip`. JSON and ZIP basenames share the same `TableName_yyyyMMdd_HHmmss_SSS` timestamp; multi-table runs join their table names. Excel filenames also contain that timestamp. JSON and ZIP are published together only after export completes. **History → Render** reads the saved JSON, without querying either compared database; **Download** returns the saved ZIP. History survives restarts. Running jobs do not resume after a restart; incomplete working rows are discarded before the next job.
+
+Backend integration tests exercise capture, upserts, composite-key comparisons, exclusions, pagination and JSON/Excel exports. The opt-in half-million-row test uses a file-backed H2 working database:
+
+```powershell
+mvn -f backend/pom.xml '-Dtest=SnapshotScaleTest' '-Dedac.snapshot.scale=true' '-DargLine=-Xmx768m' test
+```
+
 ## Run the combined application
 
 Prerequisites: Java 17+, Maven 3.9+, Node.js 22.12+ or 24+, npm for frontend builds.

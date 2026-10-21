@@ -34,11 +34,12 @@ public class RegistryService {
         if ("ORACLE".equals(input.databaseType()) && (input.password() == null || input.password().isBlank())) throw new IllegalArgumentException("Password is required for a new Oracle connection.");
         String url = sourceUrl(input);
         String encrypted = cipher.encrypt(input.password()==null?"":input.password());
+        String schema=connectionSchema(input,input.password()==null?"":input.password());
         var keys=new GeneratedKeyHolder();
         try {
             db.update(c -> {
                 var p=c.prepareStatement("INSERT INTO connection_profile(name,jdbc_url,username,schema_name,database_type,host,port,connection_type,database_name,password_ciphertext) VALUES(?,?,?,?,?,?,?,?,?,?)",new String[]{"id"});
-                p.setString(1,input.name().trim());p.setString(2,url);p.setString(3,input.username().trim());p.setString(4,identifier(input.schema()));
+                p.setString(1,input.name().trim());p.setString(2,url);p.setString(3,input.username().trim());p.setString(4,schema);
                 p.setString(5,input.databaseType());p.setString(6,input.host());p.setObject(7,input.port());p.setString(8,input.connectionType());p.setString(9,input.databaseName());p.setString(10,encrypted);return p;
             },keys);
         } catch (DuplicateKeyException e) { throw new IllegalArgumentException("A connection with that name already exists."); }
@@ -49,9 +50,10 @@ public class RegistryService {
         if(!existing.databaseType().equals(input.databaseType())) throw new IllegalArgumentException("Create a new profile to change database type.");
         String url = sourceUrl(input);
         String encrypted = input.password() == null || input.password().isBlank() ? storedPassword(id) : cipher.encrypt(input.password());
+        String schema=connectionSchema(input,cipher.decrypt(encrypted));
         try {
             db.update("UPDATE connection_profile SET name=?,jdbc_url=?,username=?,schema_name=?,host=?,port=?,connection_type=?,database_name=?,password_ciphertext=? WHERE id=?",
-                input.name().trim(),url,input.username().trim(),identifier(input.schema()),input.host(),input.port(),input.connectionType(),input.databaseName(),encrypted,id);
+                input.name().trim(),url,input.username().trim(),schema,input.host(),input.port(),input.connectionType(),input.databaseName(),encrypted,id);
         } catch (DuplicateKeyException e) {
             throw new IllegalArgumentException("A connection with that name already exists.");
         }
@@ -106,6 +108,14 @@ public class RegistryService {
             catch(DuplicateKeyException duplicate) { /* Existing rows are retained unchanged. */ }
         }
         return new AppendResult(added,names.size()-added,tables(id).size());
+    }
+    private static String connectionSchema(ConnectionInput input,String password) {
+        if(input.schema()!=null&&!input.schema().isBlank())return identifier(input.schema());
+        var properties=new Properties();properties.setProperty("user",input.username().trim());properties.setProperty("password",password);
+        if("ORACLE".equals(input.databaseType())){properties.setProperty("oracle.net.CONNECT_TIMEOUT","10000");properties.setProperty("oracle.jdbc.ReadTimeout","30000");}
+        try(var connection=DriverManager.getConnection(sourceUrl(input),properties)){
+            String schema=connection.getSchema();return identifier(schema==null||schema.isBlank()?("H2".equals(input.databaseType())?"PUBLIC":input.username()):schema);
+        }catch(SQLException e){throw new IllegalArgumentException("Could not determine the default schema. Enter the schema explicitly or check the connection credentials.");}
     }
     private static String sourceUrl(ConnectionInput input) {
         if("H2".equals(input.databaseType()))return H2Source.url(input.host(),input.port(),input.connectionType(),input.databaseName());

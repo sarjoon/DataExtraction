@@ -1,0 +1,117 @@
+package com.edac;
+
+import static org.assertj.core.api.Assertions.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import java.sql.*;
+import java.nio.file.*;
+import java.util.*;
+import java.util.zip.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
+
+@SpringBootTest(properties={"spring.datasource.url=jdbc:h2:mem:snapshot_tests;DB_CLOSE_DELAY=-1","spring.datasource.password="})
+@AutoConfigureMockMvc @ActiveProfiles("local")
+class SnapshotIntegrationTest {
+    @TempDir static Path directory;
+    @DynamicPropertySource static void settings(DynamicPropertyRegistry registry){registry.add("edac.snapshot.directory",()->directory.toString());}
+    @Autowired SnapshotService service;@Autowired SnapshotReports reports;@Autowired SnapshotDatabase databases;@Autowired RegistryService registry;@Autowired ObjectMapper json;@Autowired MockMvc mvc;
+    long connection(String database){return registry.save(new Models.ConnectionInput("Snapshot "+UUID.randomUUID(),"H2","localhost",9092,"MEMORY",database,"sa","","")).id();}
+    String database(){return "snapshot_"+UUID.randomUUID().toString().replace("-","");}
+    SnapshotService.Job await(SnapshotService.Job job) throws Exception {
+        long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(90);
+        while(service.job(job.id()).status().equals("RUNNING")&&System.nanoTime()<deadline)Thread.sleep(25);
+        return service.job(job.id());
+    }
+    void success(SnapshotService.Job job) throws Exception {assertThat(await(job)).extracting(SnapshotService.Job::status).as(service.job(job.id()).message()).isEqualTo("COMPLETED");}
+    @Test void capturesAndComparesCompositeKeysInBatchesAndReopensJsonWithFourSheetExcel() throws Exception {
+        long before=connection(database()),after=connection(database());
+        try(var c=databases.open(before);var s=c.createStatement()){
+            s.execute("CREATE TABLE ITEMS(ID INT,PART VARCHAR(20),AMOUNT DECIMAL(14,2),NOTE VARCHAR(100),AUDIT_TS TIMESTAMP,PRIMARY KEY(ID,PART))");
+            s.execute("CREATE TABLE ITEMS_EXTRA(OTHER_ID INT PRIMARY KEY)");
+            s.execute("INSERT INTO ITEMS SELECT X,'A',X/10.0,'name'||X,TIMESTAMP '2026-01-01 00:00:00' FROM SYSTEM_RANGE(1,640)");
+        }
+        service.configure(before,List.of(new SnapshotService.Config("ITEMS",List.of("AUDIT_TS"))));
+        var capture=new SnapshotService.Request(before,after,List.of("ITEMS"),"CREATE");
+        assertThat(service.inspect(capture).get(0)).containsEntry("exists",false);
+        success(service.start(capture,false));
+        assertThat(service.config(after)).containsExactly(new SnapshotService.Config("ITEMS",List.of("AUDIT_TS")));
+        try(var c=databases.open(after);var s=c.createStatement()){
+            s.execute("DELETE FROM ITEMS WHERE ID IN (1,2)");s.execute("INSERT INTO ITEMS VALUES(641,'A',64.1,'new',NULL),(642,'A',64.2,'new',NULL)");
+            s.execute("UPDATE ITEMS SET AMOUNT=99.9,NOTE='changed' WHERE ID=3");s.execute("UPDATE ITEMS SET NOTE=NULL WHERE ID=5");s.execute("UPDATE ITEMS SET AUDIT_TS=CURRENT_TIMESTAMP");
+        }
+        var job=service.start(new SnapshotService.Request(before,after,List.of("ITEMS"),null),true);success(job);
+        var report=reports.summary(job.id());var tables=(List<?>)report.get("tables");var table=(Map<?,?>)tables.get(0);
+        assertThat(table.get("beforeCount")).isEqualTo(640);assertThat(table.get("afterCount")).isEqualTo(640);
+        assertThat(table.get("beforeOnlyCount")).isEqualTo(2);assertThat(table.get("afterOnlyCount")).isEqualTo(2);assertThat(table.get("differenceCount")).isEqualTo(2);assertThat(table.get("unchangedCount")).isEqualTo(636);
+        assertThat(table.get("status")).isEqualTo("Difference exists");
+        var page=reports.page(job.id(),"ITEMS","differences",0,1);assertThat(page.get("total")).isEqualTo(2L);assertThat((List<?>)page.get("rows")).hasSize(1);
+        assertThat((List<?>)reports.page(job.id(),"ITEMS","differences",1,1).get("rows")).hasSize(1);
+        assertThat(reports.history()).anyMatch(r->r.get("id").equals(job.id()));
+        Path zip=reports.zip(job.id());assertThat(zip.getFileName().toString()).isEqualTo(job.id()+".zip");assertThat(directory.resolve("snapshot/json/"+job.id()+".json")).exists();
+        try(var entries=new ZipFile(zip.toFile())){assertThat(entries.size()).isEqualTo(1);var entry=entries.entries().nextElement();assertThat(entry.getName()).isEqualTo("ITEMS_"+report.get("timestamp")+".xlsx");
+            try(var book=new XSSFWorkbook(entries.getInputStream(entry))){assertThat(book.getNumberOfSheets()).isEqualTo(4);assertThat(book.getSheetName(0)).isEqualTo("Summary");assertThat(book.getSheet("Records Only Before").getLastRowNum()).isEqualTo(2);assertThat(book.getSheet("Differences").getLastRowNum()).isEqualTo(2);}}
+        mvc.perform(get("/api/snapshot/reports/"+job.id()+"/ITEMS/beforeOnly")).andExpect(status().isOk()).andExpect(jsonPath("$.size").value(10)).andExpect(jsonPath("$.rows.length()").value(2));
+        mvc.perform(post("/api/snapshot/capture").contentType("application/json").content(json.writeValueAsString(capture))).andExpect(status().isForbidden());
+        // Append restores deleted records, updates existing keys, and retains target-only rows.
+        success(service.start(new SnapshotService.Request(before,after,List.of("ITEMS"),"APPEND"),false));
+        try(var c=databases.open(after);var s=c.createStatement();var r=s.executeQuery("SELECT COUNT(*),MAX(CASE WHEN ID=3 THEN NOTE END) FROM ITEMS")){r.next();assertThat(r.getInt(1)).isEqualTo(642);assertThat(r.getString(2)).isEqualTo("name3");}
+        success(service.start(new SnapshotService.Request(before,after,List.of("ITEMS"),"TRUNCATE"),false));
+        var equal=service.start(new SnapshotService.Request(before,after,List.of("ITEMS"),null),true);success(equal);
+        var equalTable=(Map<?,?>)((List<?>)reports.summary(equal.id()).get("tables")).get(0);assertThat(equalTable.get("status")).isEqualTo("No difference");assertThat(equalTable.get("unchangedCount")).isEqualTo(640);
+        assertThat(await(service.start(capture,false)).status()).isEqualTo("FAILED");
+    }
+    @Test void rejectsMissingKeysIgnoredKeysAndSameDatabaseAliasesAndSupportsEmptyTables() throws Exception {
+        String name=database();long first=connection(name),alias=connection(name),other=connection(database());
+        try(var c=databases.open(first);var s=c.createStatement()){s.execute("CREATE TABLE EMPTY_TABLE(ID INT PRIMARY KEY,VALUE_N DECIMAL(10,2))");s.execute("CREATE TABLE NO_KEY(VALUE_N INT)");}
+        assertThatThrownBy(()->service.configure(first,List.of(new SnapshotService.Config("NO_KEY",List.of())))).hasMessageContaining("primary key");
+        assertThatThrownBy(()->service.configure(first,List.of(new SnapshotService.Config("EMPTY_TABLE",List.of("ID"))))).hasMessageContaining("cannot be ignored");
+        service.configure(first,List.of(new SnapshotService.Config("EMPTY_TABLE",List.of())));
+        assertThatThrownBy(()->service.inspect(new SnapshotService.Request(first,alias,List.of("EMPTY_TABLE"),"CREATE"))).hasMessageContaining("same database");
+        success(service.start(new SnapshotService.Request(first,other,List.of("EMPTY_TABLE"),"CREATE"),false));
+        var compare=service.start(new SnapshotService.Request(first,other,List.of("EMPTY_TABLE"),null),true);success(compare);
+        assertThat(((Map<?,?>)((List<?>)reports.summary(compare.id()).get("tables")).get(0)).get("status")).isEqualTo("No difference");
+        assertThatThrownBy(()->reports.page(compare.id(),"EMPTY_TABLE","differences",-1,10)).hasMessageContaining("page size");
+        assertThatThrownBy(()->reports.summary("../outside")).hasMessageContaining("Invalid snapshot");
+        assertThat(service.configure(first,List.of())).isEmpty();
+    }
+    @Test void rollsBackDestinationRowsWhenTruncateImportFails() throws Exception {
+        long first=connection(database()),second=connection(database());
+        try(var c=databases.open(first);var s=c.createStatement()){s.execute("CREATE TABLE LIMITED_TABLE(ID INT PRIMARY KEY,NOTE VARCHAR(100))");s.execute("INSERT INTO LIMITED_TABLE VALUES(1,'too long for destination')");}
+        try(var c=databases.open(second);var s=c.createStatement()){s.execute("CREATE TABLE LIMITED_TABLE(ID INT PRIMARY KEY,NOTE VARCHAR(3))");s.execute("INSERT INTO LIMITED_TABLE VALUES(99,'old')");}
+        service.configure(first,List.of(new SnapshotService.Config("LIMITED_TABLE",List.of())));
+        var failed=await(service.start(new SnapshotService.Request(first,second,List.of("LIMITED_TABLE"),"TRUNCATE"),false));assertThat(failed.status()).isEqualTo("FAILED");
+        try(var c=databases.open(second);var s=c.createStatement();var r=s.executeQuery("SELECT ID,NOTE FROM LIMITED_TABLE")){assertThat(r.next()).isTrue();assertThat(r.getInt(1)).isEqualTo(99);assertThat(r.getString(2)).isEqualTo("old");assertThat(r.next()).isFalse();}
+    }
+    @Test void streamsMoreThanOneHundredDifferenceRowsToJsonAndExcel() throws Exception {
+        long first=connection(database()),second=connection(database());
+        for(long id:List.of(first,second))try(var c=databases.open(id);var s=c.createStatement()){s.execute("CREATE TABLE MANY_CHANGES(ID INT PRIMARY KEY,NOTE VARCHAR(50))");s.execute("INSERT INTO MANY_CHANGES SELECT X,'old' FROM SYSTEM_RANGE(1,250)");}
+        try(var c=databases.open(second);var s=c.createStatement()){s.execute("UPDATE MANY_CHANGES SET NOTE='new'");}
+        service.configure(first,List.of(new SnapshotService.Config("MANY_CHANGES",List.of())));var job=service.start(new SnapshotService.Request(first,second,List.of("MANY_CHANGES"),null),true);success(job);
+        assertThat(reports.page(job.id(),"MANY_CHANGES","differences",24,10).get("total")).isEqualTo(250L);assertThat((List<?>)reports.page(job.id(),"MANY_CHANGES","differences",24,10).get("rows")).hasSize(10);
+        try(var zip=new ZipFile(reports.zip(job.id()).toFile());var book=new XSSFWorkbook(zip.getInputStream(zip.entries().nextElement()))){assertThat(book.getSheet("Differences").getLastRowNum()).isEqualTo(250);assertThat(book.getSheet("Differences").getRow(0).getCell(0).getStringCellValue()).isEqualTo("ID");}
+    }
+    @Test void preservesBinaryNullAndTimestampValuesOnCopyAndExportsMultipleWorkbooks() throws Exception {
+        long first=connection(database()),second=connection(database());
+        try(var c=databases.open(first);var s=c.createStatement()){
+            s.execute("CREATE TABLE PAYLOADS(ID INT PRIMARY KEY,DATA_B BLOB,DETAIL_C CLOB,WHEN_D TIMESTAMP(9))");
+            s.execute("INSERT INTO PAYLOADS VALUES(1,X'0102FF','text',TIMESTAMP '2026-01-01 12:34:56.123456789'),(2,NULL,NULL,NULL)");
+            s.execute("CREATE TABLE SECOND_TABLE(ID INT PRIMARY KEY,VALUE_N DECIMAL(10,2))");
+        }
+        service.configure(first,List.of(new SnapshotService.Config("PAYLOADS",List.of()),new SnapshotService.Config("SECOND_TABLE",List.of())));
+        success(service.start(new SnapshotService.Request(first,second,List.of("PAYLOADS","SECOND_TABLE"),"CREATE"),false));
+        var job=service.start(new SnapshotService.Request(first,second,List.of("PAYLOADS","SECOND_TABLE"),null),true);success(job);
+        try(var entries=new ZipFile(reports.zip(job.id()).toFile())){assertThat(entries.size()).isEqualTo(2);}
+        assertThat((List<?>)reports.summary(job.id()).get("tables")).hasSize(2);
+    }
+}

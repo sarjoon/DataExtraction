@@ -11,6 +11,7 @@ import { Api } from './api';
     <div class="nav-heading">CONFIGURATION</div>
     <a routerLink="/connections" routerLinkActive="active"><span class="nav-icon">▤</span>Database connections</a>
     <a routerLink="/tables" routerLinkActive="active"><span class="nav-icon">▦</span>Table list<span class="nav-count">{{api.tables().length}}</span></a>
+    <details class="snapshot-menu" open><summary>Snapshot</summary><a routerLink="/snapshot" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Compare</a><a routerLink="/snapshot/configuration" routerLinkActive="active">Configuration</a><a routerLink="/snapshot/capture" routerLinkActive="active">Take snapshot</a><a routerLink="/snapshot/history" routerLinkActive="active">History</a></details>
     <div class="nav-heading">GENERATION</div>
     <a routerLink="/triggers" routerLinkActive="active"><span class="nav-icon">&#8644;</span>Complete Call Trigger</a>
     <a routerLink="/mapping" routerLinkActive="active"><span class="nav-icon">▧</span>Mapping workbook<span class="soon">01</span></a>

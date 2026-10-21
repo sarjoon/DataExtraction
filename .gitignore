@@ -12,3 +12,6 @@ outputs/
 %SystemDrive%/
 samples/
 
+
+**/snapshot/json/
+**/snapshot/zip/

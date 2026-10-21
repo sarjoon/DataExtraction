@@ -13,7 +13,7 @@ public final class Models {
         @NotBlank @Pattern(regexp="SERVICE_NAME|SID|FILE|MEMORY|TCP") String connectionType,
         @NotBlank @Pattern(regexp="[A-Za-z0-9_][A-Za-z0-9_.$#-]{0,127}") String databaseName,
         @NotBlank @Size(max=100) String username,
-        @NotBlank @Pattern(regexp="[A-Za-z_][A-Za-z0-9_$#]{0,127}") String schema,
+        @Pattern(regexp="(?:[A-Za-z_][A-Za-z0-9_$#]{0,127})?") String schema,
         @Size(max=500) String password) {
         @Override public String toString() { return "ConnectionInput[password=REDACTED]"; }
     }
