@@ -1,0 +1,7 @@
+cdm_clientrelation_status
+cdm_clientrelation_type
+cdm_commercial_roles
+cdm_preferredtableclassmapping
+cdm_roletype
+CUSTOM_cdm_clientrelationo
+CUSTOM_cdm_p_financialenvi
