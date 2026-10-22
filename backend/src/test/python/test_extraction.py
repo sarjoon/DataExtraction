@@ -27,7 +27,7 @@ class ExtractionTest(unittest.TestCase):
     def test_fixed_utf8_bytes_negative_padding_and_null(self):
         with tempfile.TemporaryDirectory() as directory:
             rows=self.fixture(directory,[['V-12.5','Vé'],['V1','N']],kind='FIXED')
-            self.assertEqual(rows[1].encode('utf-8'),b'D-00012.5'+ 'é'.encode('utf-8')+b' '*18)
+            self.assertEqual(rows[1].encode('utf-8'),b'D-00012.5'+ 'é'.encode('utf-8')+b' '*19)
             self.assertEqual(len(rows[2].encode('utf-8')),29);self.assertEqual(len(rows[0]),63)
 
     def test_overflow_and_bad_rows_do_not_publish(self):
@@ -48,5 +48,14 @@ class ExtractionTest(unittest.TestCase):
             number='99999999999999999999999999999999999999'
             rows=self.fixture(directory,([('V'+number),'VName'] for _ in range(1001)))
             self.assertEqual(rows[-1],'T 1001 '+str(int(number)*1001));self.assertEqual(len(rows),1003)
+
+    def test_large_clob_is_not_truncated_and_oversize_fails_without_publishing(self):
+        body='large "quoted" body '+('x'*100000)
+        with tempfile.TemporaryDirectory() as directory:
+            rows=self.fixture(directory,[['V1','V'+body]])
+            self.assertEqual(rows[1],'D 1 "'+body.replace('"','""')+'"')
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(csv.Error):self.fixture(directory,[['V1','V'+('x'*(16*1024*1024))]])
+            self.assertFalse((Path(directory)/'output').exists());self.assertFalse((Path(directory)/'output.part').exists())
 
 if __name__=='__main__':unittest.main()

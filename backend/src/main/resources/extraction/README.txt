@@ -22,18 +22,26 @@ still be delivered if an entity fails. Configure TRANSFER_DIR for optional atomi
 Delimited output: one configured delimiter, UTF-8, LF line endings. Values containing the delimiter
 or double quotes are quoted; embedded quotes become two double quotes. NULL is unquoted \N;
 the actual text \N is quoted. No escaping is applied to the record type H/D/T itself.
-Fixed-length output: widths are UTF-8 BYTES, text is space-padded on the right, numeric values are
+Fixed-length output: lengths are CHARACTERS from the mapping metadata, never editable overrides.
+TIMESTAMP is 19, DATE is 10, CLOB/NCLOB/BLOB are 3000. Other fields use mapping/dictionary lengths.
+UTF-8 byte sizes can be larger for multibyte characters. Text is space-padded on the right, numeric values are
 zero-padded on the left after their sign. Decimals retain their decimal point. NULL is spaces.
 Overflow fails the entity and removes its partial final file; no value is silently truncated.
-Fixed-length H fields: system 20, country 20, business date 8, generation timestamp 14 bytes.
-Fixed-length T fields: record count 15, optional decimal control sum 40 bytes, space-padded right.
+Fixed-length H fields: system 20, country 20, business date 8, generation timestamp 14 characters.
+Fixed-length T fields: record count 15, optional decimal control sum 40 characters, space-padded right.
 Detail fields use extraction.json widths, in metadata order. With envelope off, only data is written.
 
-Dates are YYYY-MM-DD, timestamps YYYY-MM-DD HH24:MI:SS.FF6, zoned timestamps include TZH:TZM.
+Dates are YYYY-MM-DD, timestamps YYYY-MM-DD HH24:MI:SS (19 characters, no fractional seconds).
 The session time zone is UTC (including TIMESTAMP WITH LOCAL TIME ZONE). Numeric formatting uses
 a decimal point. CR and LF in character data are replaced by spaces to keep one physical record per
-row. RAW is hexadecimal. LOB, LONG, XML and other unsupported types require an extraction view
-that converts them to bounded VARCHAR2 values; generation otherwise fails explicitly. Numeric
+row. RAW is hexadecimal. CLOB and NCLOB are supported without substring conversion. SQLcl's
+LOB display limit is set above the formatter's enforced limit of 16,777,216 characters per staging
+CSV field (including its one-character internal marker). Larger fields fail the entity without
+publishing a partial file. Fixed-length LOB values must fit the automatic 3000-character length.
+BLOB values are hexadecimal text, generated in chunks using an inline PL/SQL function (Oracle 12c+).
+Two hexadecimal characters represent one source byte; no binary data is silently discarded.
+LONG, XML and other unsupported types require an extraction view that converts them to bounded
+supported values; generation otherwise fails explicitly. Numeric
 control sums use decimal arithmetic over exactly the records written.
 Header: H<delimiter>system<delimiter>country<delimiter>business date<delimiter>generation timestamp
 Detail: D<delimiter>value1<delimiter>value2...

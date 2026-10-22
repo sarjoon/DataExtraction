@@ -21,9 +21,9 @@ def field(value, delimiter):
 
 def fixed(value, width, numeric=False):
     value = '' if value is None else value
-    size = len(value.encode('utf-8'))
+    size = len(value)
     if size > width:
-        raise ValueError('Value exceeds fixed width of %s UTF-8 bytes' % width)
+        raise ValueError('Value exceeds mapping length of %s characters' % width)
     padding = width - size
     if numeric and value:
         return value[:1] + '0' * padding + value[1:] if value[:1] in ('-', '+') else '0' * padding + value
