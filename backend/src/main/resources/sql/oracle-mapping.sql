@@ -42,7 +42,7 @@ SELECT
     k.PK_FLAG,
     k.FK_FLAG,
     
-    da.sqlname_c AS SOURCE_DATA_TYPE,
+    dd.sqlname_c AS SOURCE_DATA_TYPE,
     CASE
         WHEN c.data_type IN ('CLOB', 'BLOB') THEN 3000
     

@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('Snapshot configures exclusions, captures, compares, paginates and reopens history',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- let batches:{id:number;name:string;tables:string[]}[]=[];
+ let batches:{id:number;name:string;tables:string[]}[]=[];let finishComparison=false;
  let registered=['ITEMS'];let configs=[{tableName:'ITEMS',ignoredColumns:['AUDIT_TS']}];let captured=false;let compared=false;
  const report={id:'ITEMS_20261021_120000_001',timestamp:'20261021_120000_001',startedAt:'2026-10-21T04:00:00Z',completedAt:'2026-10-21T04:01:00Z',before:{name:'Before DB',schema:'PUBLIC'},after:{name:'After DB',schema:'PUBLIC'},tables:[{tableName:'ITEMS',primaryKeys:['ID','PART'],columns:['ID','PART','VALUE_N','AUDIT_TS'],ignoredColumns:['AUDIT_TS'],beforeCount:500000,afterCount:500000,beforeOnlyCount:12,afterOnlyCount:12,differenceCount:12,unchangedCount:499976,status:'Difference exists'}]};
  Object.assign(report,{batch:{id:91,name:'Release checks',tables:['ITEMS']},id:'Release_checks_20261021_120000_001'});
@@ -21,7 +21,7 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
   else if(path==='/api/snapshot/capture'){expect(request.postDataJSON()).toEqual({sourceId:1,targetId:2,tables:[],mode:'APPEND',batchId:91});captured=true;body={id:'capture',operation:'CAPTURE',status:'RUNNING',message:'Starting',processed:0};}
   else if(path==='/api/snapshot/compare'){compared=true;body={id:'compare',operation:'COMPARE',status:'RUNNING',message:'Starting',processed:0};}
   else if(path==='/api/snapshot/jobs/capture')body={id:'capture',operation:'CAPTURE',status:'COMPLETED',message:'Completed',processed:500000,reportId:null};
-  else if(path==='/api/snapshot/jobs/compare')body={id:'compare',operation:'COMPARE',status:'COMPLETED',message:'Completed',processed:1000000,reportId:report.id};
+  else if(path==='/api/snapshot/jobs/compare')body={id:'compare',operation:'COMPARE',status:finishComparison?'COMPLETED':'RUNNING',message:finishComparison?'Completed':'Comparing matching records: ITEMS',processed:499988,beforeKeysRead:500000,afterKeysRead:500000,beforeOnly:12,afterOnly:12,reportId:finishComparison?report.id:null};
   else if(path==='/api/snapshot/history')body=[report];
   else if(path==='/api/snapshot/reports/'+report.id)body=report;
   else if(path.endsWith('/download')){await route.fulfill({contentType:'application/zip',headers:{'Content-Disposition':'attachment; filename="'+report.id+'.zip"'},body:'zip'});return;}
@@ -70,6 +70,10 @@ test('Snapshot configures exclusions, captures, compares, paginates and reopens 
  await page.getByRole('navigation',{name:'Snapshot navigation'}).getByRole('link',{name:'Compare',exact:true}).click();
  await expect(page.getByRole('combobox',{name:'After Modification',exact:true}).getByRole('option',{name:/Protected DB/})).toHaveJSProperty('disabled',false);
  await page.getByRole('combobox',{name:'Execution batch',exact:true}).selectOption({label:'Release checks (1 tables)'});await page.getByRole('button',{name:'Compare tables'}).click();
+ await expect(page.getByText('Across selected tables: 499,988 record pairs compared',{exact:true})).toBeVisible();
+ await expect(page.getByText('Keys read — Before: 500,000 · After: 500,000',{exact:true})).toBeVisible();
+ await expect(page.getByText('Records only Before: 12 · Records only After: 12',{exact:true})).toBeVisible();
+ finishComparison=true;
  await expect(page.getByRole('cell',{name:'Difference exists',exact:true})).toBeVisible();expect(compared).toBe(true);
  await expect(page.getByRole('img',{name:/499976 unchanged/})).toBeVisible();
  await page.screenshot({path:'../outputs/snapshot-verification/dashboard.png',fullPage:true});

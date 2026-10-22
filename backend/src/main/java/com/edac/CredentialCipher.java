@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class CredentialCipher {
+    // An explicitly empty password contains no secret and must not depend on a key.
+    private static final String EMPTY_PASSWORD = "empty:v1";
     private final SecretKeySpec key;
     private final SecureRandom random = new SecureRandom();
 
@@ -46,6 +48,7 @@ public class CredentialCipher {
     }
 
     public String encrypt(String password) {
+        if(password.isEmpty())return EMPTY_PASSWORD;
         try {
             byte[] iv = new byte[12]; random.nextBytes(iv);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -56,6 +59,7 @@ public class CredentialCipher {
     }
 
     public String decrypt(String value) {
+        if(EMPTY_PASSWORD.equals(value))return "";
         try {
             if (value == null || !value.startsWith("v1:")) throw new IllegalArgumentException();
             ByteBuffer buffer = ByteBuffer.wrap(Base64.getDecoder().decode(value.substring(3)));

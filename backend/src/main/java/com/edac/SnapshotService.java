@@ -25,7 +25,7 @@ public class SnapshotService {
     }
     public record Batch(long id,String name,List<String> tables) {}
     public record BatchInput(Long id,String name,List<String> tables) {}
-    public record Job(String id,String operation,String status,String message,long processed,String reportId) {}
+    public record Job(String id,String operation,String status,String message,long processed,String reportId,long beforeKeysRead,long afterKeysRead,long beforeOnly,long afterOnly) {}
     private final JdbcTemplate db;private final RegistryService registry;private final SnapshotDatabase databases;private final SnapshotReports reports;private final ObjectMapper json;
     private final org.springframework.transaction.support.TransactionTemplate transactions;
     private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{var t=new Thread(r,"snapshot-worker");t.setDaemon(true);return t;});
@@ -122,7 +122,7 @@ public class SnapshotService {
         String prefix=selectedBatch==null?configs.get(0).tableName()+(configs.size()>1?"_plus_"+(configs.size()-1)+"_tables":""):selectedBatch.name().replace(' ','_');
         String id=prefix+"_"+timestamp+"_"+UUID.randomUUID().toString().substring(0,8);
         boolean reclaim=jobs.isEmpty();
-        Job job=new Job(id,compare?"COMPARE":"CAPTURE","RUNNING","Starting",0,null);active=id;jobs.put(id,job);
+        Job job=new Job(id,compare?"COMPARE":"CAPTURE","RUNNING","Starting",0,null,0,0,0,0);active=id;jobs.put(id,job);
         jobs.entrySet().removeIf(e->!e.getKey().equals(active)&&!e.getValue().status().equals("RUNNING")&&jobs.size()>50);
         worker.submit(()->{
             String failure=null;
@@ -140,8 +140,12 @@ public class SnapshotService {
         // These two EDAC scratch tables belong exclusively to the single Snapshot worker.
         db.execute("TRUNCATE TABLE snapshot_key_stage");db.execute("TRUNCATE TABLE snapshot_row_stage");
     }
-    private void update(String id,String status,String message,long processed,String report){Job previous=jobs.get(id);jobs.put(id,new Job(id,previous.operation(),status,message,processed,report));}
+    private void update(String id,String status,String message,long processed,String report){Job previous=jobs.get(id);jobs.put(id,new Job(id,previous.operation(),status,message,processed,report,previous.beforeKeysRead(),previous.afterKeysRead(),previous.beforeOnly(),previous.afterOnly()));}
     private void progress(String id,String message,long increment){if(Thread.currentThread().isInterrupted())throw new IllegalStateException("Snapshot job interrupted.");var previous=jobs.get(id);update(id,"RUNNING",message,previous.processed()+increment,null);}
+    private void comparisonProgress(String id,String message,long beforeKeys,long afterKeys,long beforeOnly,long afterOnly){
+        if(Thread.currentThread().isInterrupted())throw new IllegalStateException("Snapshot job interrupted.");
+        var previous=jobs.get(id);jobs.put(id,new Job(id,previous.operation(),"RUNNING",message,previous.processed(),null,previous.beforeKeysRead()+beforeKeys,previous.afterKeysRead()+afterKeys,previous.beforeOnly()+beforeOnly,previous.afterOnly()+afterOnly));
+    }
     private static void compatible(Table before,Table after){
         if(!before.keys().equals(after.keys()))throw new IllegalArgumentException("Primary keys differ for "+before.name());
         if(!new HashSet<>(before.columns().stream().map(Column::name).toList()).equals(new HashSet<>(after.columns().stream().map(Column::name).toList())))throw new IllegalArgumentException("Column names differ for "+before.name());
@@ -177,9 +181,10 @@ public class SnapshotService {
         var batch=new ArrayList<Object[]>();
         try(var statement=connection.prepareStatement(sql,ResultSet.TYPE_FORWARD_ONLY,ResultSet.CONCUR_READ_ONLY)){
             statement.setFetchSize(BATCH);statement.setQueryTimeout(300);
-            try(var rows=statement.executeQuery()){while(rows.next()){var key=new LinkedHashMap<String,String>();for(int i=0;i<table.keys().size();i++)key.put(table.keys().get(i),value(rows,i+1,table.column(table.keys().get(i))));batch.add(new Object[]{id,table.name(),hash(key),encode(key)});if(batch.size()==BATCH){insertKeys(batch,side);progress(id,"Reading "+(side.equals("B")?"Before":"After")+" keys: "+table.name(),batch.size());batch.clear();}}}
-        }if(!batch.isEmpty()){insertKeys(batch,side);progress(id,"Reading keys: "+table.name(),batch.size());}
+            try(var rows=statement.executeQuery()){while(rows.next()){var key=new LinkedHashMap<String,String>();for(int i=0;i<table.keys().size();i++)key.put(table.keys().get(i),value(rows,i+1,table.column(table.keys().get(i))));batch.add(new Object[]{id,table.name(),hash(key),encode(key)});if(batch.size()==BATCH){insertKeys(batch,side);keyProgress(id,table.name(),side,batch.size());batch.clear();}}}
+        }if(!batch.isEmpty()){insertKeys(batch,side);keyProgress(id,table.name(),side,batch.size());}
     }
+    private void keyProgress(String id,String table,String side,int size){comparisonProgress(id,"Reading "+(side.equals("B")?"Before":"After")+" keys: "+table,side.equals("B")?size:0,side.equals("A")?size:0,0,0);}
     private void insertKeys(List<Object[]> batch,String side){String column=side.equals("B")?"before_key_json":"after_key_json";transactions.executeWithoutResult(status->db.batchUpdate("MERGE INTO snapshot_key_stage(run_id,table_name,key_hash,"+column+") KEY(run_id,table_name,key_hash) VALUES(?,?,?,?)",batch));}
     private Map<String,Map<String,String>> fetch(Connection c,Table table,List<Map<String,String>> keys,List<String> columns) throws SQLException {
         String select="SELECT "+names(columns)+" FROM "+table.sql()+" WHERE ";
@@ -220,7 +225,9 @@ public class SnapshotService {
                             }else row.put("values",category.equals("beforeOnly")?oldRows.get(pair.hash()):newRows.get(pair.hash()));
                             output.add(new Object[]{id,left.name(),category.equals("matched")?"differences":category,encode(row)});count++;
                         }
-                        stageRows(id,left.name(),category,output);progress(id,"Comparing "+left.name()+": "+category,batch.size());
+                        stageRows(id,left.name(),category,output);
+                        if(category.equals("matched"))progress(id,"Comparing matching records: "+left.name(),batch.size());
+                        else comparisonProgress(id,"Reading "+(category.equals("beforeOnly")?"Before-only":"After-only")+" records: "+left.name(),0,0,category.equals("beforeOnly")?batch.size():0,category.equals("afterOnly")?batch.size():0);
                     }counts.put(category,count);
                 }
                 long beforeCount=counts.get("beforeOnly")+counts.get("matched")+unchanged;

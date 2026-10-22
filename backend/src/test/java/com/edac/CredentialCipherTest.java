@@ -23,4 +23,16 @@ class CredentialCipherTest {
         var environment=new MockEnvironment();environment.setActiveProfiles("production");
         assertThatThrownBy(()->new CredentialCipher("",directory.resolve("key").toString(),environment)).isInstanceOf(IllegalStateException.class);
     }
+    @Test void explicitEmptyPasswordSurvivesRestartWithDifferentKeyWithoutMaskingUnreadableSecrets() {
+        var environment=new MockEnvironment();environment.setActiveProfiles("local");
+        String keyPath=directory.resolve("first.key").toString();
+        var first=new CredentialCipher("",keyPath,environment);
+        String empty=first.encrypt(""),secret=first.encrypt("nonempty-secret");
+        assertThat(new CredentialCipher("",keyPath,environment).decrypt(empty)).isEmpty();
+        var restarted=new CredentialCipher("",directory.resolve("replacement.key").toString(),environment);
+        assertThat(restarted.decrypt(empty)).isEmpty();
+        assertThatThrownBy(()->restarted.decrypt(secret)).hasMessageContaining("Cannot decrypt");
+        assertThatThrownBy(()->restarted.decrypt("v1:unreadable")).hasMessageContaining("Cannot decrypt");
+        assertThatThrownBy(()->restarted.decrypt(null)).hasMessageContaining("Cannot decrypt");
+    }
 }

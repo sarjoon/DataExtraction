@@ -34,6 +34,7 @@ export class Api {
   async downloadTriggers(connectionId:number,screenIds:number[]){
     return this.download(`/connections/${connectionId}/screens/workbook`,{screenIds});
   }
+  async downloadScripts(connectionId:number,settings:unknown){return this.download(`/connections/${connectionId}/extraction-scripts`,settings);}
   private async download(path:string,body:unknown){
     await this.get('/csrf');
     try{return await firstValueFrom(this.http.post('/api'+path,body,{responseType:'blob'}));}

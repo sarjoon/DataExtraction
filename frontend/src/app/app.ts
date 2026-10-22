@@ -20,7 +20,7 @@ import { Api } from './api';
     <details class="feature-menu" open><summary>EDAC Extraction</summary>
       <a routerLink="/tables" routerLinkActive="active">Table list<span class="nav-count">{{api.tables().length}}</span></a>
       <a routerLink="/mapping" routerLinkActive="active">Mapping workbook</a>
-      <a routerLink="/generation" routerLinkActive="active">Fixed-length files</a>
+      <a routerLink="/generation" routerLinkActive="active">Extraction Scripts</a>
     </details>
     <details class="feature-menu" open><summary>Call Trigger</summary>
       <a routerLink="/triggers" routerLinkActive="active">Complete Call Trigger</a>
@@ -35,6 +35,6 @@ import { Api } from './api';
     @if(api.busy()){<div class="activity" role="status">Working…</div>}
     <router-outlet/>
   </main>
-  <footer>Extraction Framework <span>Database metadata → Mapping workbook → Fixed-length files</span></footer>
+  <footer>Extraction Framework <span>Database metadata → Mapping workbook → Extraction scripts</span></footer>
 </div>`})
 export class AppComponent {api=inject(Api);constructor(){void this.api.init();}}

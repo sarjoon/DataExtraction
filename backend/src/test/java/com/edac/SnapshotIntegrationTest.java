@@ -47,13 +47,17 @@ class SnapshotIntegrationTest {
         configure(before,List.of(new SnapshotService.Config("ITEMS",List.of("AUDIT_TS"))));
         var capture=new SnapshotService.Request(before,after,List.of("ITEMS"),"CREATE");
         assertThat(service.inspect(capture).get(0)).containsEntry("exists",false);
-        success(service.start(capture,false));
+        var captureJob=service.start(capture,false);success(captureJob);
+        assertThat(service.job(captureJob.id()).processed()).isEqualTo(640);
         assertThat(service.config(after)).containsExactly(new SnapshotService.Config("ITEMS",List.of("AUDIT_TS")));
         try(var c=databases.open(after);var s=c.createStatement()){
             s.execute("DELETE FROM ITEMS WHERE ID IN (1,2)");s.execute("INSERT INTO ITEMS VALUES(641,'A',64.1,'new',NULL),(642,'A',64.2,'new',NULL)");
             s.execute("UPDATE ITEMS SET AMOUNT=99.9,NOTE='changed' WHERE ID=3");s.execute("UPDATE ITEMS SET NOTE=NULL WHERE ID=5");s.execute("UPDATE ITEMS SET AUDIT_TS=CURRENT_TIMESTAMP");
         }
         var job=service.start(new SnapshotService.Request(before,after,List.of("ITEMS"),null),true);success(job);
+        var completed=service.job(job.id());assertThat(completed.processed()).isEqualTo(638);
+        assertThat(completed.beforeKeysRead()).isEqualTo(640);assertThat(completed.afterKeysRead()).isEqualTo(640);
+        assertThat(completed.beforeOnly()).isEqualTo(2);assertThat(completed.afterOnly()).isEqualTo(2);
         var report=reports.summary(job.id());var tables=(List<?>)report.get("tables");var table=(Map<?,?>)tables.get(0);
         assertThat(table.get("beforeCount")).isEqualTo(640);assertThat(table.get("afterCount")).isEqualTo(640);
         assertThat(table.get("beforeOnlyCount")).isEqualTo(2);assertThat(table.get("afterOnlyCount")).isEqualTo(2);assertThat(table.get("differenceCount")).isEqualTo(2);assertThat(table.get("unchangedCount")).isEqualTo(636);
@@ -78,6 +82,8 @@ class SnapshotIntegrationTest {
         try(var c=databases.open(after);var s=c.createStatement();var r=s.executeQuery("SELECT COUNT(*),MAX(CASE WHEN ID=3 THEN NOTE END) FROM ITEMS")){r.next();assertThat(r.getInt(1)).isEqualTo(642);assertThat(r.getString(2)).isEqualTo("name3");}
         success(service.start(new SnapshotService.Request(before,after,List.of("ITEMS"),"TRUNCATE"),false));
         var equal=service.start(new SnapshotService.Request(before,after,List.of("ITEMS"),null),true);success(equal);
+        assertThat(service.job(equal.id()).processed()).isEqualTo(640);
+        assertThat(service.job(equal.id()).beforeOnly()).isZero();assertThat(service.job(equal.id()).afterOnly()).isZero();
         var equalTable=(Map<?,?>)((List<?>)reports.summary(equal.id()).get("tables")).get(0);assertThat(equalTable.get("status")).isEqualTo("No difference");assertThat(equalTable.get("unchangedCount")).isEqualTo(640);
         assertThat(await(service.start(capture,false)).status()).isEqualTo("FAILED");
     }
@@ -183,6 +189,17 @@ class SnapshotIntegrationTest {
             assertThat(service.inspect(request)).singleElement().satisfies(row->assertThat(row).containsEntry("exists",false));
         }
         success(service.start(request,false));
+        // Recreate credential readers with a different key, as after restarting from another folder.
+        var environment=new org.springframework.mock.env.MockEnvironment();environment.setActiveProfiles("local");
+        var replacementCipher=new CredentialCipher("",directory.resolve("replacement-"+UUID.randomUUID()+".key").toString(),environment);
+        var oracleFactory=new OracleConnectionFactory();
+        var restartedRegistry=new RegistryService(configDb,replacementCipher,new OracleSource(oracleFactory),new H2Source());
+        var restartedDatabases=new SnapshotDatabase(restartedRegistry,configDb,replacementCipher,oracleFactory);
+        for(long id:List.of(source,target)){
+            assertThat(restartedRegistry.test(id).connected()).isTrue();
+            try(var c=restartedDatabases.open(id);var s=c.createStatement();var rows=s.executeQuery("SELECT COUNT(*) FROM INSPECT_CREDENTIALS")){assertThat(rows.next()).isTrue();}
+        }
+        success(service.start(new SnapshotService.Request(source,target,List.of("INSPECT_CREDENTIALS"),null),true));
     }
     @Test void rollsBackDestinationRowsWhenTruncateImportFails() throws Exception {
         long first=connection(database()),second=connection(database());
