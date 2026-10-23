@@ -17,11 +17,14 @@ public class RegistryService {
     private final CredentialCipher cipher;
     private final OracleSource oracle;
     private final H2Source h2;
+    private SybaseSource sybase;
+    @org.springframework.beans.factory.annotation.Autowired
+    public RegistryService(JdbcTemplate db,CredentialCipher cipher,OracleSource oracle,H2Source h2,SybaseSource sybase){this(db,cipher,oracle,h2);this.sybase=sybase;}
     public RegistryService(JdbcTemplate db, CredentialCipher cipher, OracleSource oracle, H2Source h2) {
         this.db = db; this.cipher = cipher; this.oracle = oracle; this.h2 = h2;
     }
     public List<ConnectionProfile> connections() {
-        return db.query("SELECT * FROM connection_profile WHERE database_type='ORACLE' OR (database_type='H2' AND connection_type IN ('FILE','MEMORY','TCP')) ORDER BY id", (r,n) -> new ConnectionProfile(
+        return db.query("SELECT * FROM connection_profile WHERE database_type IN ('ORACLE','SYBASE') OR (database_type='H2' AND connection_type IN ('FILE','MEMORY','TCP')) ORDER BY id", (r,n) -> new ConnectionProfile(
             r.getLong("id"),r.getString("name"),r.getString("database_type"),r.getString("host"),r.getObject("port")==null?9092:r.getInt("port"),
             r.getString("connection_type"),r.getString("database_name"),r.getString("jdbc_url"),r.getString("username"),
             r.getString("schema_name"),r.getString("password_ciphertext") != null,r.getBoolean("read_only")));
@@ -77,10 +80,12 @@ public class RegistryService {
     public TestResult test(long id) {
         var profile = connection(id);
         String password=connectionPassword(id);
+        if("SYBASE".equals(profile.databaseType()))return sybase.test(profile,password);
         return "H2".equals(profile.databaseType())?h2.test(profile,password):oracle.test(profile,password);
     }
     public List<TableName> discover(long id) {
         var profile = connection(id);
+        if("SYBASE".equals(profile.databaseType()))return sybase.discover(profile,connectionPassword(id));
         return "H2".equals(profile.databaseType())?h2.discover(profile,cipher.decrypt(storedPassword(id))):oracle.discover(profile,cipher.decrypt(storedPassword(id)));
     }
     public List<TableEntry> tables(long id) {
@@ -97,11 +102,13 @@ public class RegistryService {
         var profile=connection(connectionId);
         var name=new TableName(table.schema(),table.name());
         var password=cipher.decrypt(storedPassword(connectionId));
+        if("SYBASE".equals(profile.databaseType()))return sybase.columns(profile,password,name);
         return "H2".equals(profile.databaseType())?h2.columns(profile,password,name):oracle.columns(profile,password,name);
     }
     public List<MappingField> mappingFields(long connectionId,long tableId) {
         var table=table(connectionId,tableId);var profile=connection(connectionId);
         var name=new TableName(table.schema(),table.name());var password=cipher.decrypt(storedPassword(connectionId));
+        if("SYBASE".equals(profile.databaseType()))return sybase.columns(profile,password,name).stream().map(c->new MappingField(c,null,null,null)).toList();
         return "H2".equals(profile.databaseType())?h2.mappingFields(profile,password,name):oracle.mappingFields(profile,password,name);
     }
     @Transactional
@@ -113,7 +120,8 @@ public class RegistryService {
         for(String name:names) {
             String[] parts=name.trim().split("\\.",-1);
             if(parts.length>2) throw new IllegalArgumentException("Use TABLE_NAME or SCHEMA.TABLE_NAME: "+name);
-            parsed.add(new TableName(parts.length==2?identifier(parts[0]):profile.schema(),identifier(parts[parts.length-1])));
+            if("SYBASE".equals(profile.databaseType())){for(String part:parts)identifier(part);parsed.add(new TableName(parts.length==2?parts[0]:profile.schema(),parts[parts.length-1]));}
+            else parsed.add(new TableName(parts.length==2?identifier(parts[0]):profile.schema(),identifier(parts[parts.length-1])));
         }
         int added=0;
         for(var table:parsed) {
@@ -122,8 +130,12 @@ public class RegistryService {
         }
         return new AppendResult(added,names.size()-added,tables(id).size());
     }
-    private static String connectionSchema(ConnectionInput input,String password) {
-        if(input.schema()!=null&&!input.schema().isBlank())return identifier(input.schema());
+    private String connectionSchema(ConnectionInput input,String password) {
+        if(input.schema()!=null&&!input.schema().isBlank()){identifier(input.schema());return "SYBASE".equals(input.databaseType())?input.schema().trim():identifier(input.schema());}
+        if("SYBASE".equals(input.databaseType())){
+            var profile=new ConnectionProfile(0,input.name(),"SYBASE",input.host(),input.port(),"ASE",input.databaseName(),sourceUrl(input),input.username(),"dbo",true,true);
+            try(var c=sybase.open(profile,password);var s=c.createStatement();var r=s.executeQuery("SELECT USER_NAME()")){if(r.next()){String owner=r.getString(1);identifier(owner);return owner;}throw new SQLException();}catch(SQLException e){throw new IllegalArgumentException("Could not determine the Sybase default owner. Enter the owner explicitly (for example dbo), or check credentials.");}
+        }
         var properties=new Properties();properties.setProperty("user",input.username().trim());properties.setProperty("password",password);
         if("ORACLE".equals(input.databaseType())){properties.setProperty("oracle.net.CONNECT_TIMEOUT","10000");properties.setProperty("oracle.jdbc.ReadTimeout","30000");}
         try(var connection=DriverManager.getConnection(sourceUrl(input),properties)){
@@ -131,6 +143,7 @@ public class RegistryService {
         }catch(SQLException e){throw new IllegalArgumentException("Could not determine the default schema. Enter the schema explicitly or check the connection credentials.");}
     }
     private static String sourceUrl(ConnectionInput input) {
+        if("SYBASE".equals(input.databaseType())){if(!"ASE".equals(input.connectionType()))throw new IllegalArgumentException("Choose ASE for Sybase.");return SybaseDriverLoader.url(input.host(),input.port(),input.databaseName());}
         if("H2".equals(input.databaseType()))return H2Source.url(input.host(),input.port(),input.connectionType(),input.databaseName());
         if(input.port()==null)throw new IllegalArgumentException("Oracle port is required.");
         return OracleConnectionFactory.url(input.host(),input.port(),input.connectionType(),input.databaseName());

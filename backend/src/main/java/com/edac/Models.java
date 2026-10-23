@@ -7,10 +7,10 @@ public final class Models {
     private Models() {}
     public record ConnectionInput(
         @NotBlank @Size(max=100) String name,
-        @NotBlank @Pattern(regexp="ORACLE|H2") String databaseType,
+        @NotBlank @Pattern(regexp="ORACLE|H2|SYBASE") String databaseType,
         @Pattern(regexp="[A-Za-z0-9][A-Za-z0-9.-]{0,252}") String host,
         @Min(1) @Max(65535) Integer port,
-        @NotBlank @Pattern(regexp="SERVICE_NAME|SID|FILE|MEMORY|TCP") String connectionType,
+        @NotBlank @Pattern(regexp="SERVICE_NAME|SID|FILE|MEMORY|TCP|ASE") String connectionType,
         @NotBlank @Pattern(regexp="[A-Za-z0-9_][A-Za-z0-9_.$#-]{0,127}") String databaseName,
         @NotBlank @Size(max=100) String username,
         @Pattern(regexp="(?:[A-Za-z_][A-Za-z0-9_$#]{0,127})?") String schema,

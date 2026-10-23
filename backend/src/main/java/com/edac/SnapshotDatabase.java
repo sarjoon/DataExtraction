@@ -17,6 +17,7 @@ public class SnapshotDatabase {
     private final RegistryService registry;private final JdbcTemplate db;private final CredentialCipher cipher;private final OracleConnectionFactory oracle;
     public SnapshotDatabase(RegistryService registry,JdbcTemplate db,CredentialCipher cipher,OracleConnectionFactory oracle){this.registry=registry;this.db=db;this.cipher=cipher;this.oracle=oracle;}
     public Connection open(long id) throws SQLException {
+        if("SYBASE".equals(registry.connection(id).databaseType()))throw new IllegalArgumentException("Use Schema Comparison for Sybase. Data snapshot capture and data comparison support Oracle and H2.");
         var p=registry.connection(id);String password=registry.connectionPassword(id);
         if("ORACLE".equals(p.databaseType()))return oracle.open(p,password);
         var connection=DriverManager.getConnection(H2Source.url(p.host(),p.port(),p.connectionType(),p.databaseName()),p.username(),password);

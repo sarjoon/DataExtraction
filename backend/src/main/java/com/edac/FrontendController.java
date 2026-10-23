@@ -9,4 +9,6 @@ public class FrontendController {
     public String frontend() {
         return "forward:/index.html";
     }
+    @GetMapping({"/snapshot/schema","/snapshot/schema/history","/snapshot/schema/report/{id}"})
+    public String schema(){return "forward:/index.html";}
 }

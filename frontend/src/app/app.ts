@@ -16,6 +16,7 @@ import { Api } from './api';
       <a routerLink="/snapshot/capture" routerLinkActive="active">Take snapshot</a>
       <a routerLink="/snapshot" routerLinkActive="active" [routerLinkActiveOptions]="{exact:true}">Compare</a>
       <a routerLink="/snapshot/history" routerLinkActive="active">History</a>
+      <a routerLink="/snapshot/schema" routerLinkActive="active">Schema Comparison</a>
     </details>
     <details class="feature-menu" open><summary>EDAC Extraction</summary>
       <a routerLink="/tables" routerLinkActive="active">Table list<span class="nav-count">{{api.tables().length}}</span></a>

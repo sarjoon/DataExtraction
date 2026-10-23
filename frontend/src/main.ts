@@ -10,6 +10,7 @@ import { MappingComponent } from './app/mapping';
 import { TriggersComponent } from './app/triggers';
 import { SnapshotComponent } from './app/snapshot';
 import { ExtractionComponent } from './app/extraction';
+import { SchemaComponent } from './app/schema';
 bootstrapApplication(AppComponent,{providers:[provideHttpClient(),provideRouter([
   {path:'',pathMatch:'full',redirectTo:'overview'},
   {path:'overview',component:OverviewComponent},
@@ -26,5 +27,8 @@ bootstrapApplication(AppComponent,{providers:[provideHttpClient(),provideRouter(
   {path:'snapshot/report/:id/:table',component:SnapshotComponent,data:{view:'report'}},
   {path:'snapshot/report/:id',component:SnapshotComponent,data:{view:'report'}},
   {path:'generation',component:ExtractionComponent},
+  {path:'snapshot/schema',component:SchemaComponent,data:{view:'compare'}},
+  {path:'snapshot/schema/history',component:SchemaComponent,data:{view:'history'}},
+  {path:'snapshot/schema/report/:id',component:SchemaComponent,data:{view:'report'}},
   {path:'**',redirectTo:'overview'}
 ])]}).catch(console.error);

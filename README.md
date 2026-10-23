@@ -1,19 +1,41 @@
 # Extraction Framework
 
-Extraction Framework uses Angular and Spring Boot to prepare mapping workbooks and fixed-length files.
+Extraction Framework uses Angular and Spring Boot to prepare mapping workbooks and extraction scripts, capture data snapshots and compare database schemas.
 
 ## Database architecture
 
 - **EDAC’s H2 database stores configuration.** Flyway manages EDAC connection profiles and configured table lists in H2. Inspect these through the H2 console.
-- **Oracle and separate H2 databases are supported sources.** Connection tests, discovery and column previews use the selected source profile and its encrypted credentials.
+- **Oracle, H2 and Sybase ASE connection profiles are supported.** Sybase is supported by Schema Comparison, connection testing and basic dictionary discovery. Data snapshot capture/comparison remains Oracle/H2; extraction script generation remains Oracle. Connections use encrypted saved credentials.
 - Source database tables are never created or migrated by Flyway.
-- The user's table-structure query is still pending. The mapping screen previews standard source column metadata; custom Oracle field-extraction SQL and fixed-length file generation remain pending.
+- Schema Comparison reads database dictionary metadata. Extraction Scripts uses the Oracle mapping metadata and generates delimited or fixed-length extraction packages.
 
 ## Snapshot
 
 Connections have a **Read-only connection** checkbox. Flyway V12 protects all existing profiles by default; newly created profiles also default to read-only. Keep source connections read-only. Explicitly uncheck and save the setting only on intended Snapshot destinations. Read-only connections are allowed for discovery, extraction, source reads and both comparison sides, but Snapshot rejects destination inspection/capture and all create, append/update and truncate/import modes with HTTP 403. The backend checks the setting before mutation and each copy batch, independently of the browser controls. This application setting does not change database account grants or restrict direct SQL tools.
 
 Database connections are global. The **Snapshot** main menu groups **Table Definition**, **Batches**, **Configuration**, **Take snapshot**, **Compare**, and **History**. **EDAC Extraction** contains Table List, Mapping Workbook and Extraction Scripts; **Call Trigger** contains Complete Call Trigger. Flyway V9 adds Snapshot configuration and disk-backed working tables to EDAC's configuration database. It does not modify source tables.
+
+### Schema Comparison and external Sybase driver
+
+Open **Snapshot → Schema Comparison**. Choose Before and After connections; Oracle, H2 and Sybase ASE can be compared across database types, and either side may be read-only. Scope is all metadata visible to each login in its saved schema/owner. Object totals and names are compared for tables, views, standalone procedures, triggers and indexes. Equal counts with different names are flagged. Index identities include their table name so Sybase indexes with the same name on different tables are counted separately. Oracle package members/functions are not counted as standalone procedures; H2 uses its catalog's PROCEDURE classification.
+
+Table structure comparison includes column existence/order, native/logical types, character/binary lengths, numeric precision/scale, nullability, defaults, identity/generated flags when reported, primary and foreign keys, unique/check constraints, and index column order/uniqueness/filters/Oracle expressions. Logical type normalization is enabled by default and may be disabled. It compares basic type families and declared capacities, not full vendor-specific storage/range semantics. Original before/after values remain in changes. Constraint and index names, including generated names, are compared literally. Permission failures stop comparison; unreported optional attributes are flagged for review instead of claiming complete equality. Source text of procedures/views/triggers, grants, physical storage and index statistics are outside scope.
+
+Exact per-table row counts are optional and off by default because large tables may take time. No table data is loaded for structure comparison. Metadata/count queries have timeouts, and no source DDL/DML is executed. Keep schemas and source data stable during comparison; there is no shared point-in-time transaction across databases. Tables are matched case-insensitively; names differing only by case are rejected as ambiguous. Up to 10,000 tables / 500,000 columns per selected schema are supported, with no arbitrary three-table limit.
+
+Jobs run in the background and show separate Before/After table progress. Results use six Excel sheets: Summary, ObjectCounts, ObjectDifferences, TableRowCounts, StructureSummary and StructureDifferences. Changed/mismatched rows are yellow, added rows green, removed rows pink, and unreported/not-comparable entries require review. Grids default to 10 rows per page, with per-table change drill-down. Workbook values are strings to preserve precision and avoid formula interpretation; exceptionally long Excel values carry a truncation marker while JSON retains the complete value.
+
+Each completed run saves matching `Schema_<timestamp>_<suffix>.json` and `.zip` files under `<snapshot-base>/snapshot/schema/json` and `.../zip`. The ZIP contains the six-sheet XLSX. The base is `-Dedac.snapshot.directory=...` or the executable JAR directory, as with data snapshots. **Schema history** (inside Schema Comparison) renders saved JSON and downloads Excel or ZIP without reconnecting to source databases. Partial/failed runs are not published. Running jobs do not resume after application restart; completed reports remain available.
+
+Flyway V13 adds the SYBASE connection type to EDAC's configuration constraints. It makes no changes to external databases. The SAP driver is NOT a Maven dependency, is NOT bundled in resources and is loaded lazily from the path supplied at startup:
+
+```text
+java -Dedac.sybase.driver-path=/opt/company/jdbc/jconn42.jar -jar edac-backend-0.1.0-schema-comparison.jar
+```
+
+Windows paths with spaces must quote the whole JVM argument, for example `"-Dedac.sybase.driver-path=D:\\Company Drivers\\jconn42.jar"`. Place the `-D` argument **before** `-jar`. EDAC can compile and start without that JAR; only opening a Sybase connection requires it. Restart EDAC after changing the path/JAR. The loader uses `com.sybase.jdbc42.jdbc.SybDriver` through standard JDBC interfaces, and calls its `connect` method directly to avoid class-loader filtering by DriverManager. No company driver needs to leave the company environment.
+
+In Database connections select **Sybase ASE**, enter host, port (default 5000), database, username/password and schema/owner (usually case-sensitive `dbo`). Leaving owner blank asks the database for `USER_NAME()`. An explicit owner permits saving a profile before installing the driver. Ensure the login can read the required ASE system catalogs and JDBC metadata procedures. Connection/catalog access must be verified against your company ASE and jConnect versions; automated tests use a generated JDBC test driver, never an SAP binary.
 
 1. Save Oracle or H2 connections for the source/before and destination/after databases. An omitted schema is resolved from the database's default schema when saving the connection; this requires a successful connection. An explicit schema can still be saved without connecting.
 2. In Snapshot Table Definition, choose the source connection and click **Discover tables** to fetch physical tables from its schema using the Oracle/H2 data dictionary. Select tables and save; the three-table restriction has been removed. These choices are stored exclusively in H2 `snapshot_table_registry`, independently of EDAC `table_registry`. In Snapshot Configuration, select a registered table from the dropdown, load its columns and save audit or other columns to ignore. Every registered table needs a declared primary key; composite primary keys are supported and cannot be ignored. Removing a registration also removes its column-exclusion configuration and batch memberships. Flyway V10 imports existing Snapshot selections into the registry and preserves their exclusions; EDAC table selections are not imported. Exclusions affect comparison, not the data copied into a snapshot.
