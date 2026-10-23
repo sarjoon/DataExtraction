@@ -19,8 +19,11 @@ public class SybaseDriverLoader {
         if(!Files.isRegularFile(file)||!Files.isReadable(file))throw new IllegalArgumentException("The configured Sybase driver JAR is missing or unreadable. Check edac.sybase.driver-path.");
         try{
             loader=new URLClassLoader(new java.net.URL[]{file.toUri().toURL()},SybaseDriverLoader.class.getClassLoader());
-            driver=Class.forName("com.sybase.jdbc42.jdbc.SybDriver",true,loader).asSubclass(Driver.class).getConstructor().newInstance();return driver;
-        }catch(Exception|LinkageError e){close();throw new IllegalArgumentException("Cannot load com.sybase.jdbc42.jdbc.SybDriver from the configured JAR. Supply a Java-compatible jconn42.jar and restart EDAC.");}
+            Class<?> driverClass;
+            try{driverClass=Class.forName("com.sybase.jdbc42.jdbc.SybDriver",false,loader);}
+            catch(ClassNotFoundException absent){driverClass=Class.forName("com.sybase.jdbc4.jdbc.SybDriver",false,loader);}
+            driver=driverClass.asSubclass(Driver.class).getConstructor().newInstance();return driver;
+        }catch(Exception|LinkageError e){close();throw new IllegalArgumentException("Cannot load a Sybase driver from the configured JAR. Supply a Java-compatible jconn4.jar (com.sybase.jdbc4.jdbc.SybDriver) or jconn42.jar (com.sybase.jdbc42.jdbc.SybDriver) and restart EDAC.",e);}
     }
     public Connection open(Models.ConnectionProfile profile,String password)throws SQLException{
         var properties=new Properties();properties.setProperty("user",profile.username());properties.setProperty("password",password);

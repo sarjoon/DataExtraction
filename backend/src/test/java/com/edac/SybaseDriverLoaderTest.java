@@ -5,11 +5,14 @@ import java.util.jar.*;
 import javax.tools.ToolProvider;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class SybaseDriverLoaderTest {
     @TempDir Path directory;
-    @Test void loadsExternalJdbcJarWithoutCompileTimeSybaseDependency()throws Exception{
-        Path source=directory.resolve("com/sybase/jdbc42/jdbc/SybDriver.java");Files.createDirectories(source.getParent());
+    @ParameterizedTest @ValueSource(strings={"jdbc42","jdbc4"})
+    void loadsExternalJdbcJarWithoutCompileTimeSybaseDependency(String driverPackage)throws Exception{
+        Path source=directory.resolve("com/sybase/"+driverPackage+"/jdbc/SybDriver.java");Files.createDirectories(source.getParent());
         Files.writeString(source,"""
 package com.sybase.jdbc42.jdbc;
 public class SybDriver implements java.sql.Driver {
@@ -26,9 +29,9 @@ public class SybDriver implements java.sql.Driver {
  public int getMajorVersion(){return 1;}public int getMinorVersion(){return 0;}public boolean jdbcCompliant(){return false;}
  public java.util.logging.Logger getParentLogger(){return java.util.logging.Logger.getGlobal();}
 }
-""");
+""".replace("jdbc42",driverPackage));
         assertThat(ToolProvider.getSystemJavaCompiler().run(null,null,null,"-d",directory.toString(),source.toString())).isZero();
-        Path jar=directory.resolve("jconn42-test.jar");try(var output=new JarOutputStream(Files.newOutputStream(jar))){output.putNextEntry(new JarEntry("com/sybase/jdbc42/jdbc/SybDriver.class"));output.write(Files.readAllBytes(source.resolveSibling("SybDriver.class")));output.closeEntry();}
+        Path jar=directory.resolve("company driver.jar");try(var output=new JarOutputStream(Files.newOutputStream(jar))){output.putNextEntry(new JarEntry("com/sybase/"+driverPackage+"/jdbc/SybDriver.class"));output.write(Files.readAllBytes(source.resolveSibling("SybDriver.class")));output.closeEntry();}
         var profile=new Models.ConnectionProfile(1,"Test","SYBASE","company-host",5000,"ASE","AAA","","test_user","dbo",true,true);
         var loader=new SybaseDriverLoader(jar.toString());try(var c=loader.open(profile,"test-password")){
             assertThat(c.getClientInfo("url")).isEqualTo("jdbc:sybase:Tds:company-host:5000/AAA");assertThat(c.getClientInfo("user")).isEqualTo("test_user");assertThat(c.getClientInfo("password")).isEqualTo("test-password");
