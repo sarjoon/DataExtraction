@@ -33,7 +33,7 @@ public final class Models {
         public MappingField(ColumnDetail column,String key,String description,String defaultValue,String mandatory){this(column,key,description,defaultValue,mandatory,java.util.Collections.emptyMap());}
         public MappingField(ColumnDetail column,String key,String description,String defaultValue){this(column,key,description,defaultValue,column.nullable()?"O":"M");}
     }
-    public record WorkbookRequest(@NotEmpty @Size(max=200) List<@NotNull @Positive Long> tableIds) {}
+    public record WorkbookRequest(@NotEmpty List<@NotNull @Positive Long> tableIds) {}
     public record ColumnSelection(@NotBlank @Size(max=128) String columnName, @NotNull Boolean included) {}
     public record TableName(String schema, String name) {}
     public record AppendRequest(@NotEmpty @Size(max=10000) List<@NotBlank String> names) {}

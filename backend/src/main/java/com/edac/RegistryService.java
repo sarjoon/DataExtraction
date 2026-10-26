@@ -57,7 +57,8 @@ public class RegistryService {
         if(!existing.databaseType().equals(input.databaseType())) throw new IllegalArgumentException("Create a new profile to change database type.");
         String url = sourceUrl(input);
         String encrypted = Boolean.TRUE.equals(input.useBlankPassword()) ? cipher.encrypt("") : input.password() == null || input.password().isBlank() ? storedPassword(id) : cipher.encrypt(input.password());
-        String schema=connectionSchema(input,Boolean.TRUE.equals(input.useBlankPassword())?"":cipher.decrypt(encrypted));
+        // Explicit schema edits do not need to open the source or decrypt retained credentials.
+        String schema=connectionSchema(input,input.schema()!=null&&!input.schema().isBlank()?"":cipher.decrypt(encrypted));
         try {
             db.update("UPDATE connection_profile SET name=?,jdbc_url=?,username=?,schema_name=?,host=?,port=?,connection_type=?,database_name=?,password_ciphertext=?,read_only=? WHERE id=?",
                 input.name().trim(),url,input.username().trim(),schema,input.host(),input.port(),input.connectionType(),input.databaseName(),encrypted,input.readOnly()==null?existing.readOnly():input.readOnly(),id);

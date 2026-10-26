@@ -16,7 +16,7 @@ public class MappingWorkbookService {
     private final JdbcTemplate db;
     public MappingWorkbookService(RegistryService registry,JdbcTemplate db){this.registry=registry;this.db=db;}
     public byte[] generate(long connectionId,List<Long> ids) throws IOException {
-        if(ids==null || ids.isEmpty() || ids.size()>200)throw new IllegalArgumentException("Select between 1 and 200 tables.");
+        if(ids==null || ids.isEmpty())throw new IllegalArgumentException("Select at least one table.");
         if(new HashSet<>(ids).size()!=ids.size())throw new IllegalArgumentException("Select each table only once.");
         var profile=registry.connection(connectionId);
         var tables=ids.stream().map(id->registry.table(connectionId,id)).toList();

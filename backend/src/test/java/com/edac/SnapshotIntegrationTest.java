@@ -167,7 +167,9 @@ class SnapshotIntegrationTest {
     @Test void explicitlyResetsUnreadableH2CredentialToEmptyAndPreservesItOnLaterEdits() throws Exception {
         long id=connection(database());var p=registry.connection(id);
         configDb.update("UPDATE connection_profile SET password_ciphertext='v1:unreadable' WHERE id=?",id);
-        assertThatThrownBy(()->registry.update(id,new Models.ConnectionInput(p.name(),"H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),p.schema(),"",null))).hasMessageContaining("Cannot decrypt");
+        registry.update(id,new Models.ConnectionInput(p.name(),"H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),"CHANGED_SCHEMA","",null));
+        assertThat(registry.connection(id).schema()).isEqualTo("CHANGED_SCHEMA");
+        assertThatThrownBy(()->registry.connectionPassword(id)).hasMessageContaining("Cannot decrypt");
         registry.update(id,new Models.ConnectionInput(p.name(),"H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),"","",null,true));
         assertThat(registry.test(id).connected()).isTrue();
         registry.update(id,new Models.ConnectionInput(p.name()+" edited","H2",p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),p.schema(),"",null));

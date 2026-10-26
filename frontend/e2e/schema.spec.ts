@@ -30,6 +30,15 @@ test('Schema Comparison supports Sybase, named differences, table drill-down and
  await page.getByRole('button',{name:'Next',exact:true}).click();await expect(page.getByRole('cell',{name:'FIELD_10',exact:true})).toBeVisible();
  const download=page.waitForEvent('download');await page.getByRole('link',{name:'Download Excel',exact:true}).click();expect((await download).suggestedFilename()).toBe(id+'.xlsx');
  await page.getByRole('link',{name:'Schema history',exact:true}).click();await expect(page.getByRole('cell',{name:'Company ASE · dbo',exact:true})).toBeVisible();
+ const heading=await page.getByRole('heading',{name:'Schema Comparison',exact:true}).boundingBox();
+ const navigation=await page.getByRole('navigation',{name:'Schema navigation'}).boundingBox();
+ expect(navigation!.x).toBeGreaterThan(heading!.x);expect(navigation!.y).toBeLessThan(heading!.y+heading!.height);
+ const actions=page.locator('.schema-report-actions');await expect(actions.getByRole('link')).toHaveCount(3);
+ const render=await actions.getByRole('link',{name:'Render',exact:true}).boundingBox();const excel=await actions.getByRole('link',{name:'Excel',exact:true}).boundingBox();expect(render!.y).toBe(excel!.y);
+ await page.screenshot({path:'test-results/schema-history.png',fullPage:true});
+ await page.setViewportSize({width:390,height:844});await expect(page.getByRole('navigation',{name:'Schema navigation'})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await page.screenshot({path:'test-results/schema-history-mobile.png',fullPage:true});await page.setViewportSize({width:1440,height:1080});
  await page.getByRole('link',{name:'Render',exact:true}).click();await expect(page.getByRole('cell',{name:'Count mismatch',exact:true})).toBeVisible();
  await page.screenshot({path:'test-results/schema-comparison.png',fullPage:true});expect(errors).toEqual([]);
 });

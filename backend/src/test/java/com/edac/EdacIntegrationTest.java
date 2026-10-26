@@ -183,6 +183,18 @@ class EdacIntegrationTest {
             .andExpect(status().isOk());
         assertThat(cipher.decrypt(db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id))).isEqualTo("new-secret");
     }
+    @Test void persistsSchemaOnlyEditsWithoutReplacingOrDecryptingThePassword()throws Exception{
+        long id=connection();
+        db.update("UPDATE connection_profile SET password_ciphertext='v1:unreadable' WHERE id=?",id);
+        var p=registry.connection(id);
+        var edit=new Models.ConnectionInput(p.name(),p.databaseType(),p.host(),p.port(),p.connectionType(),p.databaseName(),p.username(),"NEW_SCHEMA","",p.readOnly());
+        mvc.perform(post("/api/connections/"+id).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(edit)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.schema").value("NEW_SCHEMA"));
+        assertThat(registry.connection(id).schema()).isEqualTo("NEW_SCHEMA");
+        assertThat(db.queryForObject("SELECT schema_name FROM connection_profile WHERE id=?",String.class,id)).isEqualTo("NEW_SCHEMA");
+        assertThat(db.queryForObject("SELECT password_ciphertext FROM connection_profile WHERE id=?",String.class,id)).isEqualTo("v1:unreadable");
+        assertThatThrownBy(()->registry.connectionPassword(id)).hasMessageContaining("Cannot decrypt");
+    }
     @Test void hidesLegacyH2SourcesWithoutDeletingThem() throws Exception {
         db.update("INSERT INTO connection_profile(name,jdbc_url,username,schema_name) VALUES('Legacy H2','jdbc:h2:mem:legacy','sa','PUBLIC')");
         long id=db.queryForObject("SELECT id FROM connection_profile WHERE name='Legacy H2'",Long.class);
