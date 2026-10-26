@@ -1,51 +1,16 @@
-IF(ud_tenor_code_e <> 3 ,
-IF(IS_BUSINESSDATE(DATEADD(value_d,ud_tenor_code_e,ud_tenor_term_e),op_currency_id.calendar_id)=0,NEXT_BUSINESSDATE(DATEADD(value_d,ud_tenor_code_e,ud_tenor_term_e),1,op_currency_id.calendar_id),DATEADD(value_d,ud_tenor_code_e,ud
-_tenor_term_e)) ,
-IF(IS_BUSINESSDATE(DATEADD(value_d,YEAR,ud_tenor_term_e),op_currency_id.calendar_id)=0,NEXT_BUSINESSDATE(DATEADD(value_d,YEAR,ud_tenor_term_e),1,op_currency_id.calendar_id),DATEADD(value_d,YEAR,ud_tenor_term_e)))
-
-
-IF(portfolio_id<>NULL AND GET_BEST_OBJECT(GET_ENTITY("instrument"),{&ud_portfolio_id R25 - PBI Upgrade - B2C Retrofitting } &portfolio_id=portfolio_id AND &ref_curr_id.code = op_currency_id.code AND &ud_account_type_e=3 AND &nature_e=4 AND NOT(&ud_depo_status_e IN (0,2))).id <> NULL,GET_BEST_OBJECT(GET_ENTITY("instrument"),{&ud_portfolio_id R25 - PBI Upgrade - B2C Retrofitting} &portfolio_id=portfolio_id AND &ref_curr_id.code = op_currency_id.code AND &ud_account_type_e=3 AND &nature_e=4 AND NOT(&ud_d"
-"epo_status_e IN (0,2))).id,
-   NULL
-)"
-
-
-ENUM_LIST(0,1,4,6)
-
-"{&id.IS_IN_LIST["UOB_OAP_CDM_CCY_LIST"]}
-&rank_n = 1 AND NOT( &id.IS_IN_LIST["UOB_OAP_NDF_CURRENCY"])"
-instr_id.ref_curr_id
-
-
-IF(portfolio_id <> NULL AND op_currency_id <> NULL AND deposit_id <> NULL AND deposit_id.ud_original_loan_purpose_e <> 0, deposit_id.ud_original_loan_purpose_e)
-
-
-"IF(ud_tenor_code_e <> 3 ,
-IF(IS_BUSINESSDATE(DATEADD(value_d,ud_tenor_code_e,ud_tenor_term_e),op_currency_id.calendar_id)=0,NEXT_BUSINESSDATE(DATEADD(value_d,ud_tenor_code_e,ud_tenor_term_e),1,op_currency_id.calendar_id),DATEADD(value_d,ud_tenor_code_e,ud
-_tenor_term_e)) ,
-IF(IS_BUSINESSDATE(DATEADD(value_d,YEAR,ud_tenor_term_e),op_currency_id.calendar_id)=0,NEXT_BUSINESSDATE(DATEADD(value_d,YEAR,ud_tenor_term_e),1,op_currency_id.calendar_id),DATEADD(value_d,YEAR,ud_tenor_term_e)))"
-
-ud_tenor_code_e,ud_tenor_term_e,op_currency_id,value_d
-
-
-ud_client_rate_n
-
-
-select  distinct da.sqlname_c from script_definition sd
-inner join dict_attribute da on da.dict_id =sd . attribute_dict_id
-where sd.object_id in (select dict_id from dict_screen where name='UOB_WSCA_LOAN_DRAWDOWN')
-
-IF(instr_id.ref_curr_id.code IN("IDR", "JPY"), ROUND((quantity_n * ud_client_rate_n * DATEDIFF(value_d,expiration_d,DAY))/
-STRNUM(NOTEPAD("currency",instr_id.ref_curr_id.code,SYSDATE(),,"UOB_INTEREST_BASIS").title_c), 1, 2), ROUND((quantity_n * ud_client_
-rate_n * DATEDIFF(value_d,expiration_d,DAY))/
-STRNUM(NOTEPAD("currency",instr_id.ref_curr_id.code,SYSDATE(),,"UOB_INTEREST_BASIS").title_c), 0.01, 2))
-
-
-
-
-
-
-IF(ud_prepymt_repymt_e=1 AND ud_waive_ind_f = 0 , ud_old_quantity_n+ud_int_to_date_m+ud_penalty_cost_m,
-IF(ud_prepymt_repymt_e=1 AND ud_waive_ind_f = 1 , ud_old_quantity_n+ud_int_to_date_m+ud_penalty_cost_m-ud_waived_amount_m,
-IF(ud_prepymt_repymt_e=2,ud_
-old_quantity_n+ud_int_to_date_m,NULL)))
+java.sql.SQLException: ORA-17027: Stream has already been closed.
+https://docs.oracle.com/error-help/db/ora-17027/
+        at oracle.jdbc.driver.LongAccessor.getBytesInternal(LongAccessor.java:125)
+        at oracle.jdbc.driver.Accessor.getBytes(Accessor.java:1018)
+        at oracle.jdbc.driver.LongAccessor.getString(LongAccessor.java:152)
+        at oracle.jdbc.driver.GeneratedStatement.getString(GeneratedStatement.java:233)
+        at oracle.jdbc.driver.GeneratedScrollableResultSet.getString(GeneratedScrollableResultSet.java:399)
+        at oracle.jdbc.driver.GeneratedResultSet.getString(GeneratedResultSet.java:649)
+        at com.edac.SchemaMetadata.read(SchemaMetadata.java:51)
+        at com.edac.SchemaComparisonService.run(SchemaComparisonService.java:64)
+        at com.edac.SchemaComparisonService.lambda$start$2(SchemaComparisonService.java:56)
+        at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+        at java.base/java.lang.Thread.run(Thread.java:840)
