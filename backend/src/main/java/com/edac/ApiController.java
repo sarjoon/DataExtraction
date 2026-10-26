@@ -28,11 +28,17 @@ public class ApiController {
     @PostMapping("/connections/{id}") public ConnectionProfile update(@PathVariable long id,@Valid @RequestBody ConnectionInput input){return registry.update(id,input);}
     @PostMapping("/connections/{id}/test") public TestResult test(@PathVariable long id){return registry.test(id);}
     @GetMapping("/connections/{id}/tables") public List<TableEntry> tables(@PathVariable long id){return registry.tables(id);}
-    @PostMapping("/connections/{id}/tables") public AppendResult append(@PathVariable long id,@Valid @RequestBody AppendRequest input){return registry.append(id,input.names(),"MANUAL");}
-    @PostMapping("/connections/{id}/tables/import") public AppendResult upload(@PathVariable long id,@RequestParam("file") MultipartFile file)throws IOException{return registry.append(id,reader.read(file),"UPLOAD");}
-    @PostMapping("/connections/{id}/tables/discover") public AppendResult discover(@PathVariable long id){
+    @PostMapping("/connections/{id}/tables") public AppendResult append(@PathVariable long id,@Valid @RequestBody AppendRequest input){return registry.append(id,input.names(),"MANUAL",input.fileType(),input.loadStrategy(),input.updateFrequency());}
+    @PostMapping("/connections/{id}/tables/import") public AppendResult upload(@PathVariable long id,@RequestParam("file") MultipartFile file)throws IOException{return registry.registerTables(id,reader.readTables(file),"UPLOAD");}
+    @PostMapping("/connections/{id}/tables/{tableId}/options") public TableEntry options(@PathVariable long id,@PathVariable long tableId,@RequestBody TableOptions input){return registry.updateTableOptions(id,tableId,input);}
+    @PostMapping("/connections/{id}/tables/discover") public AppendResult discover(@PathVariable long id,@RequestBody(required=false) TableOptions input){
+        String fileType=input==null?null:input.fileType(),strategy=input==null?null:input.loadStrategy();
+        // Validate even when discovery returns no tables.
+        if(fileType!=null&&!fileType.isBlank()&&RegistryService.FILE_TYPES.stream().noneMatch(v->v.equalsIgnoreCase(fileType.trim())))throw new IllegalArgumentException("Invalid File Type.");
+        if(strategy!=null&&!strategy.isBlank()&&RegistryService.LOAD_STRATEGIES.stream().noneMatch(v->v.equalsIgnoreCase(strategy.trim())))throw new IllegalArgumentException("Invalid Load Strategy.");
+        String frequency=RegistryService.updateFrequency(input==null?null:input.updateFrequency());
         var result=registry.discover(id);
         if(result.isEmpty())return new AppendResult(0,0,registry.tables(id).size());
-        return registry.append(id,result.stream().map(t->t.schema()+"."+t.name()).toList(),"DATABASE");
+        return registry.append(id,result.stream().map(t->t.schema()+"."+t.name()).toList(),"DATABASE",fileType,strategy,frequency);
     }
 }

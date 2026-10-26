@@ -92,7 +92,7 @@ public class RegistryService {
     public List<TableEntry> tables(long id) {
         connection(id);
         return db.query("SELECT * FROM table_registry WHERE connection_id=? ORDER BY schema_name,table_name",(r,n)->new TableEntry(
-            r.getLong("id"),r.getLong("connection_id"),r.getString("schema_name"),r.getString("table_name"),r.getString("source"),r.getString("created_at")),id);
+            r.getLong("id"),r.getLong("connection_id"),r.getString("schema_name"),r.getString("table_name"),r.getString("source"),r.getString("created_at"),r.getString("file_type"),r.getString("load_strategy"),r.getString("update_frequency")),id);
     }
     public TableEntry table(long connectionId,long tableId) {
         return tables(connectionId).stream().filter(t->t.id()==tableId).findFirst()
@@ -114,22 +114,53 @@ public class RegistryService {
     }
     @Transactional
     public AppendResult append(long id,List<String> names,String source) {
+        return registerTables(id,names.stream().map(name->new TableRegistration(name,null,null)).toList(),source);
+    }
+    @Transactional
+    public AppendResult append(long id,List<String> names,String source,String fileType,String loadStrategy) {
+        return append(id,names,source,fileType,loadStrategy,null);
+    }
+    @Transactional
+    public AppendResult append(long id,List<String> names,String source,String fileType,String loadStrategy,String updateFrequency) {
+        return registerTables(id,names.stream().map(name->new TableRegistration(name,fileType,loadStrategy,updateFrequency)).toList(),source);
+    }
+    public static final List<String> FILE_TYPES=List.of("Master","Parameter","Transaction","Enriched","Tech Recon","Logs");
+    public static final List<String> LOAD_STRATEGIES=List.of("Full","Delta");
+    public static final List<String> UPDATE_FREQUENCIES=List.of("Daily","Weekly");
+    static String updateFrequency(String value){return option(value==null||value.isBlank()?"Daily":value,UPDATE_FREQUENCIES,"Update Frequency");}
+    private static String option(String value,List<String> allowed,String label){
+        if(value==null||value.isBlank())return "";
+        return allowed.stream().filter(v->v.equalsIgnoreCase(value.trim())).findFirst().orElseThrow(()->new IllegalArgumentException("Invalid "+label+": "+value+". Choose "+String.join(", ",allowed)+"."));
+    }
+    public TableEntry updateTableOptions(long id,long tableId,TableOptions input){
+        var existing=table(id,tableId);
+        String fileType=option(input.fileType(),FILE_TYPES,"File Type"),strategy=option(input.loadStrategy(),LOAD_STRATEGIES,"Load Strategy");
+        String frequency=input.updateFrequency()==null?existing.updateFrequency():updateFrequency(input.updateFrequency());
+        db.update("UPDATE table_registry SET file_type=?,load_strategy=?,update_frequency=? WHERE connection_id=? AND id=?",fileType,strategy,frequency,id,tableId);
+        return table(id,tableId);
+    }
+    @Transactional
+    public AppendResult registerTables(long id,List<TableRegistration> entries,String source) {
         var profile=connection(id);
-        if(names.isEmpty() || names.size()>10000) throw new IllegalArgumentException("Provide between 1 and 10,000 table names.");
+        if(entries.isEmpty() || entries.size()>10000) throw new IllegalArgumentException("Provide between 1 and 10,000 table names.");
         // Validate the complete upload before any write, so a bad row never partially appends a file.
-        List<TableName> parsed=new ArrayList<>();
-        for(String name:names) {
+        List<TableName> parsed=new ArrayList<>();var options=new ArrayList<TableOptions>();
+        for(var entry:entries) {
+            String name=entry.name();
+            if(name==null||name.isBlank())throw new IllegalArgumentException("Table name is required.");
+            options.add(new TableOptions(option(entry.fileType(),FILE_TYPES,"File Type"),option(entry.loadStrategy(),LOAD_STRATEGIES,"Load Strategy"),updateFrequency(entry.updateFrequency())));
             String[] parts=name.trim().split("\\.",-1);
             if(parts.length>2) throw new IllegalArgumentException("Use TABLE_NAME or SCHEMA.TABLE_NAME: "+name);
             if("SYBASE".equals(profile.databaseType())){for(String part:parts)identifier(part);parsed.add(new TableName(parts.length==2?parts[0]:profile.schema(),parts[parts.length-1]));}
             else parsed.add(new TableName(parts.length==2?identifier(parts[0]):profile.schema(),identifier(parts[parts.length-1])));
         }
         int added=0;
-        for(var table:parsed) {
-            try { db.update("INSERT INTO table_registry(connection_id,schema_name,table_name,source) VALUES(?,?,?,?)",id,table.schema(),table.name(),source);added++; }
+        for(int i=0;i<parsed.size();i++) {
+            var table=parsed.get(i);var selected=options.get(i);
+            try { db.update("INSERT INTO table_registry(connection_id,schema_name,table_name,source,file_type,load_strategy,update_frequency) VALUES(?,?,?,?,?,?,?)",id,table.schema(),table.name(),source,selected.fileType(),selected.loadStrategy(),selected.updateFrequency());added++; }
             catch(DuplicateKeyException duplicate) { /* Existing rows are retained unchanged. */ }
         }
-        return new AppendResult(added,names.size()-added,tables(id).size());
+        return new AppendResult(added,entries.size()-added,tables(id).size());
     }
     private String connectionSchema(ConnectionInput input,String password) {
         if(input.schema()!=null&&!input.schema().isBlank()){identifier(input.schema());return "SYBASE".equals(input.databaseType())?input.schema().trim():identifier(input.schema());}

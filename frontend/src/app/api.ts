@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 export interface Connection {id:number;name:string;databaseType:string;host:string;port:number;connectionType:string;databaseName:string;jdbcUrl:string;username:string;schema:string;passwordSaved:boolean;readOnly:boolean;}
-export interface TableEntry {id:number;connectionId:number;schema:string;name:string;source:string;createdAt:string;}
+export interface TableEntry {id:number;connectionId:number;schema:string;name:string;source:string;createdAt:string;fileType:string;loadStrategy:string;updateFrequency:string;}
 export interface Status {status:string;database:string;migrationVersion:string;consoleEnabled:boolean;}
 export interface TestResult {connected:boolean;message:string;tables:{schema:string;name:string}[];}
 export interface AppendResult {added:number;skipped:number;total:number;}

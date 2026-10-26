@@ -21,6 +21,8 @@ test('H2 source works through connection, discovery and persistent column select
   await expect(page.getByText('Connected to H2 using the saved source connection details.',{exact:true})).toBeVisible();
   execFileSync(process.env['EDAC_JAVA']||'java',['-cp',process.env['EDAC_H2_JAR']||resolve(homedir(),'.m2/repository/com/h2database/h2/2.3.232/h2-2.3.232.jar'),'org.h2.tools.RunScript','-url',profile.jdbcUrl,'-user','sa','-password','','-script',resolve('../samples/h2-source.sql')],{cwd:backend,windowsHide:true});
   await page.getByRole('link',{name:'Manage tables',exact:false}).click();
+  await page.getByRole('combobox',{name:'Discovery File Type',exact:true}).selectOption('Master');
+  await page.getByRole('combobox',{name:'Discovery Load Strategy',exact:true}).selectOption('Full');
   await page.getByRole('button',{name:'Discover & append',exact:true}).click();
   await expect(page.getByRole('cell',{name:'CUSTOMER',exact:true})).toBeVisible();
   await expect(page.getByRole('cell',{name:'ACCOUNT',exact:true})).toBeVisible();

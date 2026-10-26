@@ -36,6 +36,7 @@ test('saved Oracle configuration, encrypted credential editing and table lists',
  await page.screenshot({path:'test-results/connections.png',fullPage:true});
  await page.getByRole('link',{name:'Manage tables'}).click();
  await page.getByLabel('Table names',{exact:true}).fill('CUSTOMER\nACCOUNT\ncustomer');
+ await page.getByRole('combobox',{name:'Manual File Type',exact:true}).selectOption('Master');await page.getByRole('combobox',{name:'Manual Load Strategy',exact:true}).selectOption('Full');
  await page.getByRole('button',{name:'Append tables',exact:true}).click();
  await expect(page.getByRole('status')).toContainText('2 table(s) added. 1 duplicate(s) skipped.');
  await page.locator('input[type=file]').setInputFiles({name:'tables.csv',mimeType:'text/csv',buffer:Buffer.from('Table Name,Schema\nCUSTOMER,APP\nPAYMENT,APP')});
@@ -45,6 +46,7 @@ test('saved Oracle configuration, encrypted credential editing and table lists',
  await page.getByRole('button',{name:'Append tables',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Names must start');
  await expect(page.getByRole('cell',{name:'NEW_TABLE',exact:true})).toHaveCount(0);
+ await page.getByRole('combobox',{name:'Discovery File Type',exact:true}).selectOption('Transaction');await page.getByRole('combobox',{name:'Discovery Load Strategy',exact:true}).selectOption('Delta');
  await page.getByRole('button',{name:'Discover & append',exact:true}).click();
  await expect(page.getByRole('alert')).toContainText('Oracle connection or query failed',{timeout:20000});
  await expect(page.getByRole('cell',{name:'CONNECTION_PROFILE',exact:true})).toHaveCount(0);

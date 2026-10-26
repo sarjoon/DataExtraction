@@ -74,12 +74,19 @@ public class MappingWorkbookService {
                 var row=spec.createRow(3+serial);row.setHeight(specHeight);
                 for(int c=0;c<36;c++)row.createCell(c).setCellStyle(specStyles[c]);
                 for(int c=0;c<36;c++)put(row.getCell(c),defaults[c]);
+                // Link is inserted at C below, moving these values into F and G.
+                put(row.getCell(3),table.updateFrequency());put(row.getCell(4),table.fileType());put(row.getCell(5),table.loadStrategy());
                 put(row.getCell(0),++serial);put(row.getCell(1),label);
                 var link=wb.getCreationHelper().createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
                 link.setAddress("'"+name.replace("'","''")+"'!A1");row.getCell(1).setHyperlink(link);
             }
             addNavigationColumn(wb,spec);
             if(serial>0)validation(spec,3,2+serial,15,36,new String[]{"Y","N"});
+            if(serial>0){
+                validation(spec,3,2+serial,4,4,RegistryService.UPDATE_FREQUENCIES.toArray(String[]::new));
+                validation(spec,3,2+serial,5,5,RegistryService.FILE_TYPES.toArray(String[]::new));
+                validation(spec,3,2+serial,6,6,RegistryService.LOAD_STRATEGIES.toArray(String[]::new));
+            }
             for(int i=originalCount-1;i>=1;i--)wb.removeSheetAt(i);
             if(!skipped.isEmpty()) {
                 var report=wb.createSheet("Generation Report");

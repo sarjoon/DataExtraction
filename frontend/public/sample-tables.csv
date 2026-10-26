@@ -1,4 +1,4 @@
-Table Name
-CUSTOMER
-ACCOUNT
-TRANSACTION_HISTORY
+Table Name,Update Frequency,File Type,Load Strategy
+CUSTOMER,Daily,Master,Full
+ACCOUNT,Weekly,Parameter,Full
+TRANSACTION_HISTORY,Daily,Transaction,Delta

@@ -156,7 +156,7 @@ class EdacIntegrationTest {
         return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
     }
     @Test void usesH2ConfigurationAndSavedCredentialsForOracle() throws Exception {
-        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("13"));
+        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("15"));
         long id=connection();
         when(oracle.test(any(),eq("test-secret"))).thenReturn(new Models.TestResult(true,"Oracle test",List.of()));
         when(oracle.discover(any(),eq("test-secret"))).thenReturn(List.of(new Models.TableName("APP","CUSTOMER"),new Models.TableName("APP","ACCOUNT")));
@@ -298,6 +298,53 @@ class EdacIntegrationTest {
             sql.execute("SHUTDOWN");
         }
         verifyNoInteractions(oracle);
+    }
+    @Test void tableFileOptionsFlowThroughManualUploadDiscoveryEditingAndWorkbook()throws Exception{
+        String database="file_options_"+UUID.randomUUID().toString().replace("-","");
+        var profile=registry.save(new Models.ConnectionInput(database,"H2",null,null,"MEMORY",database,"sa","PUBLIC",""));
+        String base="/api/connections/"+profile.id()+"/tables";
+        try(var c=java.sql.DriverManager.getConnection(profile.jdbcUrl(),"sa","");var s=c.createStatement()){
+            for(String name:List.of("MANUAL_A","CSV_A","DISCOVER_A"))s.execute("CREATE TABLE "+name+"(ID INT)");
+            mvc.perform(post(base).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"names\":[\"MANUAL_A\"],\"fileType\":\"Master\",\"loadStrategy\":\"Full\"}"))
+                .andExpect(status().isOk());
+            var file=new MockMultipartFile("file","tables.csv","text/csv","Schema,Table Name,File Type,Load Strategy,Update Frequency\nPUBLIC,CSV_A,Enriched,Delta,Weekly".getBytes(StandardCharsets.UTF_8));
+            mvc.perform(multipart(base+"/import").file(file).with(csrf())).andExpect(status().isOk());
+            mvc.perform(post(base+"/discover").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"fileType\":\"Logs\",\"loadStrategy\":\"Delta\",\"updateFrequency\":\"Weekly\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.added").value(1)).andExpect(jsonPath("$.skipped").value(2));
+            var entries=registry.tables(profile.id());var manual=entries.stream().filter(t->t.name().equals("MANUAL_A")).findFirst().orElseThrow();
+            assertThat(manual.fileType()).isEqualTo("Master");assertThat(manual.loadStrategy()).isEqualTo("Full");
+            assertThat(manual.updateFrequency()).isEqualTo("Daily");
+            var csv=entries.stream().filter(t->t.name().equals("CSV_A")).findFirst().orElseThrow();
+            assertThat(csv.fileType()).isEqualTo("Enriched");assertThat(csv.loadStrategy()).isEqualTo("Delta");
+            assertThat(csv.updateFrequency()).isEqualTo("Weekly");
+            String options=base+"/"+csv.id()+"/options";
+            mvc.perform(post(options).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"fileType\":\"Tech Recon\",\"loadStrategy\":\"Full\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.fileType").value("Tech Recon")).andExpect(jsonPath("$.updateFrequency").value("Weekly"));
+            mvc.perform(post(options).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"fileType\":\"Tech Recon\",\"loadStrategy\":\"Full\",\"updateFrequency\":\"Monthly\"}"))
+                .andExpect(status().isBadRequest());
+            mvc.perform(post(options).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"fileType\":\"Other\",\"loadStrategy\":\"Full\"}"))
+                .andExpect(status().isBadRequest());
+            mvc.perform(post(options).contentType(MediaType.APPLICATION_JSON).content("{}" )).andExpect(status().isForbidden());
+            long other=connection();mvc.perform(post("/api/connections/"+other+"/tables/"+csv.id()+"/options").with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{}" )).andExpect(status().isNotFound());
+            var invalid=new MockMultipartFile("file","bad.csv","text/csv","Table Name,File Type,Load Strategy\nNEW_A,Master,Full\nNEW_B,Unknown,Delta".getBytes(StandardCharsets.UTF_8));
+            mvc.perform(multipart(base+"/import").file(invalid).with(csrf())).andExpect(status().isBadRequest());assertThat(registry.tables(profile.id())).hasSize(3);
+            byte[] workbook=workbooks.generate(profile.id(),List.of(manual.id(),csv.id(),entries.stream().filter(t->t.name().equals("DISCOVER_A")).findFirst().orElseThrow().id()));
+            try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbook))){
+                var spec=wb.getSheetAt(0);var f=new org.apache.poi.ss.usermodel.DataFormatter();
+                assertThat(f.formatCellValue(spec.getRow(2).getCell(5)).toLowerCase(java.util.Locale.ROOT)).startsWith("file type");
+                assertThat(f.formatCellValue(spec.getRow(2).getCell(6)).toLowerCase(java.util.Locale.ROOT)).startsWith("load strategy");
+                assertThat(f.formatCellValue(spec.getRow(2).getCell(4)).toLowerCase(java.util.Locale.ROOT)).startsWith("update frequency");
+                assertThat(spec.getRow(3).getCell(4).getStringCellValue()).isEqualTo("Daily");
+                assertThat(spec.getRow(4).getCell(4).getStringCellValue()).isEqualTo("Weekly");
+                assertThat(spec.getRow(5).getCell(4).getStringCellValue()).isEqualTo("Weekly");
+                assertThat(spec.getRow(3).getCell(5).getStringCellValue()).isEqualTo("Master");assertThat(spec.getRow(3).getCell(6).getStringCellValue()).isEqualTo("Full");
+                assertThat(spec.getRow(4).getCell(5).getStringCellValue()).isEqualTo("Tech Recon");assertThat(spec.getRow(5).getCell(6).getStringCellValue()).isEqualTo("Delta");
+            }
+            mvc.perform(multipart("/api/connections/"+other+"/tables/import").file(new MockMultipartFile("file","roundtrip.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",workbook)).with(csrf())).andExpect(status().isOk());
+            assertThat(registry.tables(other)).extracting(Models.TableEntry::fileType).containsExactly("Tech Recon","Logs","Master");
+            assertThat(registry.tables(other)).extracting(Models.TableEntry::updateFrequency).containsExactly("Weekly","Weekly","Daily");
+            s.execute("SHUTDOWN");
+        }
     }
     @Test void workbookUsesTemplateSelectedTablesAndSavedExclusions() throws Exception {
         String database="workbook_"+UUID.randomUUID().toString().replace("-","");

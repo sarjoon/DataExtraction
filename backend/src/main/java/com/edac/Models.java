@@ -24,7 +24,16 @@ public final class Models {
         boolean passwordSaved,boolean readOnly) {
         public ConnectionProfile(long id,String name,String databaseType,String host,int port,String connectionType,String databaseName,String jdbcUrl,String username,String schema,boolean passwordSaved){this(id,name,databaseType,host,port,connectionType,databaseName,jdbcUrl,username,schema,passwordSaved,true);}
     }
-    public record TableEntry(long id, long connectionId, String schema, String name, String source, String createdAt) {}
+    public record TableEntry(long id, long connectionId, String schema, String name, String source, String createdAt,String fileType,String loadStrategy,String updateFrequency) {
+        public TableEntry(long id,long connectionId,String schema,String name,String source,String createdAt){this(id,connectionId,schema,name,source,createdAt,"","","Daily");}
+        public TableEntry(long id,long connectionId,String schema,String name,String source,String createdAt,String fileType,String loadStrategy){this(id,connectionId,schema,name,source,createdAt,fileType,loadStrategy,"Daily");}
+    }
+    public record TableRegistration(String name,String fileType,String loadStrategy,String updateFrequency) {
+        public TableRegistration(String name,String fileType,String loadStrategy){this(name,fileType,loadStrategy,null);}
+    }
+    public record TableOptions(String fileType,String loadStrategy,String updateFrequency) {
+        public TableOptions(String fileType,String loadStrategy){this(fileType,loadStrategy,null);}
+    }
     public record ColumnDetail(int position, String name, String dataType, Number byteLength, Number characterLength,
         Integer precision, Integer scale, boolean nullable, boolean included) {
         public ColumnDetail withIncluded(boolean value) { return new ColumnDetail(position,name,dataType,byteLength,characterLength,precision,scale,nullable,value); }
@@ -36,7 +45,10 @@ public final class Models {
     public record WorkbookRequest(@NotEmpty List<@NotNull @Positive Long> tableIds) {}
     public record ColumnSelection(@NotBlank @Size(max=128) String columnName, @NotNull Boolean included) {}
     public record TableName(String schema, String name) {}
-    public record AppendRequest(@NotEmpty @Size(max=10000) List<@NotBlank String> names) {}
+    public record AppendRequest(@NotEmpty @Size(max=10000) List<@NotBlank String> names,String fileType,String loadStrategy,String updateFrequency) {
+        public AppendRequest(List<String> names){this(names,null,null,null);}
+        public AppendRequest(List<String> names,String fileType,String loadStrategy){this(names,fileType,loadStrategy,null);}
+    }
     public record AppendResult(int added, int skipped, int total) {}
     public record TestResult(boolean connected, String message, List<TableName> tables) {}
 }

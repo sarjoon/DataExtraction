@@ -10,6 +10,33 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Component
 public class TableListReader {
+    public List<Models.TableRegistration> readTables(MultipartFile file)throws IOException{
+        var rows=readRows(file,false);int header=-1,nameColumn=0,schemaColumn=-1,fileTypeColumn=-1,strategyColumn=-1,frequencyColumn=-1;
+        for(int r=0;r<Math.min(5,rows.size());r++){
+            // The mapping template includes allowed values in parentheses in these headers.
+            var labels=rows.get(r).stream().map(v->normalize(v).replaceAll("\\(.*","")).toList();
+            for(int c=0;c<labels.size();c++)if(Set.of("tablename","filename").contains(labels.get(c))){header=r;nameColumn=c;break;}
+            if(header>=0){
+                for(int c=0;c<labels.size();c++)switch(labels.get(c)){
+                    case "schema","schemaname"->schemaColumn=c;
+                    case "filetype"->fileTypeColumn=c;
+                    case "loadstrategy"->strategyColumn=c;
+                    case "updatefrequency"->frequencyColumn=c;
+                }
+                break;
+            }
+        }
+        var result=new ArrayList<Models.TableRegistration>();
+        for(int r=header+1;r<rows.size();r++){
+            var row=rows.get(r);if(row.stream().allMatch(String::isBlank))continue;
+            if(header<0&&row.stream().filter(v->!v.isBlank()).count()>1)throw new IllegalArgumentException("For multiple columns, include a Table Name or File Name header.");
+            String name=cell(row,nameColumn);if(name.isBlank())throw new IllegalArgumentException("Missing table name at row "+(r+1)+".");
+            String schema=cell(row,schemaColumn);if(!schema.isBlank())name=schema+"."+name;
+            result.add(new Models.TableRegistration(name,cell(row,fileTypeColumn),cell(row,strategyColumn),cell(row,frequencyColumn)));
+        }
+        return result;
+    }
+    private static String cell(List<String> row,int column){return column<0||column>=row.size()?"":row.get(column);}
     public List<ReadableFieldService.FieldName> readReadableFields(MultipartFile file) throws IOException {
         var rows=readRows(file,true);int header=-1,screen=-1,field=-1;
         for(int r=0;r<Math.min(5,rows.size());r++) {
