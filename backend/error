@@ -1,16 +1,319 @@
-java.sql.SQLException: ORA-17027: Stream has already been closed.
-https://docs.oracle.com/error-help/db/ora-17027/
-        at oracle.jdbc.driver.LongAccessor.getBytesInternal(LongAccessor.java:125)
-        at oracle.jdbc.driver.Accessor.getBytes(Accessor.java:1018)
-        at oracle.jdbc.driver.LongAccessor.getString(LongAccessor.java:152)
-        at oracle.jdbc.driver.GeneratedStatement.getString(GeneratedStatement.java:233)
-        at oracle.jdbc.driver.GeneratedScrollableResultSet.getString(GeneratedScrollableResultSet.java:399)
-        at oracle.jdbc.driver.GeneratedResultSet.getString(GeneratedResultSet.java:649)
-        at com.edac.SchemaMetadata.read(SchemaMetadata.java:51)
-        at com.edac.SchemaComparisonService.run(SchemaComparisonService.java:64)
-        at com.edac.SchemaComparisonService.lambda$start$2(SchemaComparisonService.java:56)
-        at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
-        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
-        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
-        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
-        at java.base/java.lang.Thread.run(Thread.java:840)
+
+SELECT user_code, access_source, channel_code, channel_profile, profile_type, profile_code
+FROM (
+    SELECT au.code user_code, 'DIRECT_USER' access_source, 'GUI' channel_code, acp.code channel_profile, 'FUNCTION_SECURITY' profile_type, fsp.code profile_code
+    FROM appl_user au LEFT JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id LEFT JOIN func_secu_prof fsp ON fsp.id = au.func_secu_prof_id
+ 
+    UNION ALL
+    SELECT au.code, 'DIRECT_USER', 'GUI', acp.code, 'FORMAT', fp.code
+    FROM appl_user au LEFT JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id LEFT JOIN format_profile fp ON fp.id = au.format_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'DIRECT_USER', 'GUI', acp.code, 'REPORT', rp.code
+    FROM appl_user au LEFT JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id LEFT JOIN report_profile rp ON rp.id = au.report_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'DIRECT_USER', 'GUI', acp.code, 'SCREEN', sp.code
+    FROM appl_user au LEFT JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id LEFT JOIN screen_profile sp ON sp.id = au.screen_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'DIRECT_USER', 'GUI', acp.code, 'MENU', mp.code
+    FROM appl_user au LEFT JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id LEFT JOIN menu_profile mp ON mp.id = au.menu_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'DIRECT_USER', 'GUI', acp.code, 'DATA', dp.code
+    FROM appl_user au LEFT JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id LEFT JOIN data_profile dp ON dp.id = au.data_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'DIRECT_USER', 'GUI', acp.code, 'EXTERNAL_SERVICE', esp.code
+    FROM appl_user au LEFT JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id LEFT JOIN ext_service_profile esp ON esp.id = au.ext_service_prof_id
+ 
+    UNION ALL
+    SELECT au.code, 'CHANNEL_PROFILE', ac.code, acp.code, 'FUNCTION_SECURITY', fsp.code
+    FROM appl_user au JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id
+    JOIN appl_channel_prof_compo acpc ON acpc.appl_channel_profile_id = acp.id
+    LEFT JOIN appl_channel ac ON ac.id = acpc.appl_channel_id
+    LEFT JOIN func_secu_prof fsp ON fsp.id = acpc.func_secu_prof_id
+ 
+    UNION ALL
+    SELECT au.code, 'CHANNEL_PROFILE', ac.code, acp.code, 'SCREEN', sp.code
+    FROM appl_user au JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id
+    JOIN appl_channel_prof_compo acpc ON acpc.appl_channel_profile_id = acp.id
+    LEFT JOIN appl_channel ac ON ac.id = acpc.appl_channel_id
+    LEFT JOIN screen_profile sp ON sp.id = acpc.screen_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'CHANNEL_PROFILE', ac.code, acp.code, 'FORMAT', fp.code
+    FROM appl_user au JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id
+    JOIN appl_channel_prof_compo acpc ON acpc.appl_channel_profile_id = acp.id
+    LEFT JOIN appl_channel ac ON ac.id = acpc.appl_channel_id
+    LEFT JOIN format_profile fp ON fp.id = acpc.format_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'CHANNEL_PROFILE', ac.code, acp.code, 'REPORT', rp.code
+    FROM appl_user au JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id
+    JOIN appl_channel_prof_compo acpc ON acpc.appl_channel_profile_id = acp.id
+    LEFT JOIN appl_channel ac ON ac.id = acpc.appl_channel_id
+    LEFT JOIN report_profile rp ON rp.id = acpc.report_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'CHANNEL_PROFILE', ac.code, acp.code, 'MENU', mp.code
+    FROM appl_user au JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id
+    JOIN appl_channel_prof_compo acpc ON acpc.appl_channel_profile_id = acp.id
+    LEFT JOIN appl_channel ac ON ac.id = acpc.appl_channel_id
+    LEFT JOIN menu_profile mp ON mp.id = acpc.menu_profile_id
+ 
+    UNION ALL
+    SELECT au.code, 'CHANNEL_PROFILE', ac.code, acp.code, 'EXTERNAL_SERVICE', esp.code
+    FROM appl_user au JOIN appl_channel_profile acp ON acp.id = au.channel_profile_id
+    JOIN appl_channel_prof_compo acpc ON acpc.appl_channel_profile_id = acp.id
+    LEFT JOIN appl_channel ac ON ac.id = acpc.appl_channel_id
+    LEFT JOIN ext_service_profile esp ON esp.id = acpc.ext_service_prof_id
+)
+WHERE profile_code IS NOT NULL
+  AND user_code = :USER_CODE
+ORDER BY user_code, access_source, channel_code, profile_type;
+ 
+ 
+This will populate output like this: 
+ 
+Then the user deep drill into the Last Column (PROFILE_CODE) mainly for PROFILE_TYPE in SCREEN, FORMAT, REPORT, DATA, FUNCTION_SECURITY. 
+ 
+SCREEN and FORMAT has 2 levels of drilldown. 
+REPORT, FUNCTION_SECURITY, and DATA has only 1 drilldown. 
+ 
+REPORT: 
+select rp.code AS REPORT_PROFILE, r.code AS REPORT_CODE, r.denom AS REPORT_DENOM
+
+from
+
+report_prof_compo rpc
+
+JOIN report_profile rp on rp.id = rpc.report_profile_id
+
+JOIN report r on r.id = rpc.report_id
+
+order by rp.code, r.code;
+ 
+ 
+ 
+DATA
+ 
+SELECT
+
+    dp.code  AS DATA_PROFILE,
+
+    dsp.code AS DATA_SECU_PROFILE,
+
+    dpc.auth_update_f AS AUTH_UPDATE,
+
+    dpc.auth_delete_f AS AUTH_DELETE
+
+FROM data_profile dp
+
+INNER JOIN data_prof_compo dpc
+
+    ON dp.id = dpc.data_profile_id
+
+INNER JOIN data_secu_prof dsp
+
+    ON dsp.id = dpc.data_secu_prof_id
+
+Order BY
+
+    dp.code,
+
+    dsp.code;
+ 
+FUNCTION_SECURITY: 
+SELECT
+
+     fsp.code AS FSP_CODE,
+
+     df.name AS FUNCTION,
+
+     de.sqlname_c AS ENTITY,
+
+     t1.code AS TYPE,
+
+     t2.code AS SUBTYPE,
+
+     dpv1.name AS MIN_STATUS,
+
+     dpv2.name AS MAX_STATUS,
+
+     fspc.create_f AS CREATE_FLAG,
+
+     fspc.update_f AS UPDATE_FLAG,
+
+     fspc.delete_f AS DELETE_FLAG,
+
+     fspc.risk_view_f AS RISK_VIEW_FLAG,
+
+     fspc.real_time_f AS REALTIME_FLAG,
+
+     fspc.view_f AS VIEW_FLAG,
+
+     fspc.visible_f AS VISIBLE_FLAG
+
+FROM func_secu_prof fsp
+
+INNER JOIN func_secu_prof_compo fspc
+
+     ON fsp.id = fspc.func_secu_prof_id
+
+LEFT JOIN dict_function df
+
+     ON df.dict_id = fspc.function_dict_id
+
+LEFT JOIN dict_entity de
+
+     ON de.dict_id = fspc.entity_dict_id
+
+LEFT JOIN type t1
+
+     ON t1.id = fspc.type_id
+
+LEFT JOIN type t2
+
+     ON t2.id = fspc.subtype_id
+
+LEFT JOIN dict_entity de_op
+
+     ON de_op.sqlname_c = 'operation'
+
+LEFT JOIN dict_attribute da_status
+
+     ON da_status.entity_dict_id = de_op.dict_id
+
+    AND da_status.sqlname_c = 'status_e'
+
+LEFT JOIN dict_perm_value dpv1
+
+     ON dpv1.attribute_dict_id = da_status.dict_id
+
+    AND dpv1.perm_val_nat_e = fspc.min_status_e
+
+LEFT JOIN dict_perm_value dpv2
+
+     ON dpv2.attribute_dict_id = da_status.dict_id
+
+    AND dpv2.perm_val_nat_e = fspc.max_status_e;
+ 
+Format Profile:
+select fp.code AS FORMAT_PROFILE, f.code AS FORMAT, f.name AS FORMAT_NAME, df.name AS FUNCTION, dpv.name AS NATURE, fpc.rank_n AS Rank
+from format f, format_profile fp, format_prof_compo fpc, dict_function df, dict_attribute da, dict_perm_value dpv
+where
+fpc.format_id = f.id
+AND fpc.format_profile_id = fp.id
+AND df.dict_id = f.function_dict_id
+AND f.nature_e = dpv.perm_val_nat_e
+AND dpv.attribute_dict_id = da.dict_id
+AND da.dict_id = (select dict_id from dict_attribute where sqlname_c = 'nature_e' AND entity_dict_id = (select dict_id from dict_entity where sqlname_c = 'format'))
+order by fp.code, df.name, dpv.name, fpc.rank_n;
+************************************************************************************************
+ 
+Format Details: 
+select f.code AS FORMAT_CODE, fe.sqlname_c as ELEMENT_CODE, fe.name as ELEMENT_NAME, fe.denom AS ELEMENT_DENOM, dd.sqlname_c AS ELEMENT_DATATYPE, fe.rank_n AS ELEMENT_RANK,
+fe.display_column_n AS DISPLAY_COLUMN, fe.display_format_c as DISPLAY_FORMAT, fe.fixed_f AS FIXED_COULMN, fe.cons_f AS CONSOLIDATION, fe.sub_total_f AS SUB_TOTAL, fe.totaliser_c AS TOTALISER,
+fe.col_width_n AS COLUMN_WIDTH
+from format_element fe, format f, dict_datatype dd
+where
+fe.format_id = f.id
+AND fe.datatype_dict_id = dd.dict_id
+order by f.code, fe.rank_n; 
+ 
+ 
+Use case: Drilldown 1
+User clicks the PROFILE_CODE corresponds to PROFILE_TYPE = FORMAT
+This will return the output of FORAT_PROFILE query - Composition of all formats.
+DrillDown 2 - 
+On the drilldown output, User clicks any items on the FORMAT column. 
+This will populate the output from the query 2. 
+ 
+Similarly for Screen: 
+SCREEN_PROFILE
+SELECT
+   sp.code               AS SCREEN_PROFILE,
+   ds.name               AS SCREEN_NAME,
+   de.sqlname_c          AS ENTITY,
+   da1.sqlname_c         AS NATURE_ATTRIB,
+   da2.sqlname_c         AS TYPE_ATTRIB,
+   da3.sqlname_c         AS SUBTYPE_ATTRIB,
+   t1.code               AS TYPE_CODE,
+   t2.code               AS SUBTYPE_CODE,
+   df.name               AS FUNCTION_CODE,
+   r.code                AS REPORT_CODE
+FROM screen_prof_compo spc
+INNER JOIN screen_profile sp
+   ON sp.id = spc.screen_profile_id
+INNER JOIN dict_screen ds
+   ON ds.dict_id = spc.screen_dict_id
+LEFT JOIN dict_entity de
+   ON de.dict_id = spc.entity_dict_id
+LEFT JOIN dict_attribute da1
+   ON da1.dict_id = spc.nat_attrib_dict_id
+LEFT JOIN dict_attribute da2
+   ON da2.dict_id = spc.type_attrib_dict_id
+LEFT JOIN dict_attribute da3
+   ON da3.dict_id = spc.subtype_attrib_dict_id
+LEFT JOIN type t1
+   ON t1.id = spc.type_id
+LEFT JOIN type t2
+   ON t2.id = spc.subtype_id
+LEFT JOIN dict_function df
+   ON df.dict_id = spc.function_dict_id
+LEFT JOIN report r
+   ON r.id = spc.report_id
+ORDER BY
+   sp.code,
+   ds.name,
+   de.sqlname_c;
+************************************************************************************************
+SCREEN:
+SELECT
+   ds.name          AS SCREEN_NAME,
+   de.sqlname_c     AS ENTITY,
+   dp.name          AS PANEL,
+   den.denom        As PANEL_DENOM,
+   da.sqlname_c     AS ATTRIBUTE,
+   dpv.name         AS NATURE,
+   dp.edit_e        AS EDITABLE,
+   dp.mandatory_f   AS MANDATORY,
+   dp2.name         AS PARENT_PANEL,
+   den2.denom        As PANEL_DENOM
+FROM dict_screen ds
+INNER JOIN dict_entity de
+   ON de.dict_id = ds.entity_dict_id
+INNER JOIN dict_panel dp
+   ON dp.screen_dict_id = ds.dict_id
+LEFT JOIN dict_attribute da
+   ON da.dict_id = dp.attribute_dict_id
+LEFT JOIN dict_panel dp2
+   ON dp2.dict_id = dp.parent_panel_dict_id
+LEFT JOIN dict_entity de_panel
+   ON de_panel.sqlname_c = 'dict_panel'
+LEFT JOIN dict_attribute da_nature
+   ON da_nature.entity_dict_id = de_panel.dict_id
+  AND da_nature.sqlname_c = 'nature_e'
+INNER JOIN dict_perm_value dpv
+   ON dpv.attribute_dict_id = da_nature.dict_id
+  AND dpv.perm_val_nat_e = dp.nature_e
+LEFT JOIN denomination den 
+   ON dp.dict_id = den.object_id
+LEFT JOIN denomination den2
+   ON dp.parent_panel_dict_id = den2.object_id
+ORDER BY
+   ds.name,
+   de.sqlname_c,
+   dp.name,
+   da.sqlname_c;
+ 
+Drilldown 1
+User clicks the PROFILE_CODE corresponds to PROFILE_TYPE = SCREEN
+This will return the output of SCREEN_PROFILE query - Composition of all Screens.
+ 
+DrillDown 2 - 
+On the drilldown output, User clicks any items on the SCREEN_NAME column. 
+This will populate the output from the query 2 (SCREEN). 
+ 
