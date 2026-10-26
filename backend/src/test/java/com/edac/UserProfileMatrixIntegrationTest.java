@@ -37,6 +37,7 @@ class UserProfileMatrixIntegrationTest {
         mvc.perform(get(path+"/matrix")).andExpect(status().isBadRequest());
         mvc.perform(get(path+"/users")).andExpect(status().isNotFound());
         mvc.perform(get("/reports/user-profile-matrix")).andExpect(status().isOk());
+        mvc.perform(get("/reports")).andExpect(status().isOk());
     }
     @Test void executesAllQueriesForEnteredUserWithSchemaScopeMembershipChecksAndPaging()throws Exception{
         var profile=connection();

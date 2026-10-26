@@ -44,6 +44,7 @@ public class SecurityConfig {
                 a.requestMatchers("/h2-console/**").denyAll();
                 a.requestMatchers("/error").permitAll();
                 a.requestMatchers(HttpMethod.GET,"/sample-readable-fields.csv").permitAll();
+                a.requestMatchers(HttpMethod.GET, "/reports", "/reports/user-profile-matrix").permitAll();
                 a.requestMatchers(HttpMethod.GET, "/", "/index.html", "/overview", "/connections", "/tables", "/mapping", "/generation", "/triggers", "/snapshot", "/snapshot/**", "/*.js", "/*.css", "/media/**", "/sample-tables.csv", "/sample-screens.csv", "/favicon.ico").permitAll();
                 if (local) a.requestMatchers("/api/**").permitAll();
                 else a.requestMatchers("/api/**").authenticated();
