@@ -26,6 +26,9 @@ import { Api } from './api';
     <details class="feature-menu" open><summary>Call Trigger</summary>
       <a routerLink="/triggers" routerLinkActive="active">Complete Call Trigger</a>
     </details>
+    <details class="feature-menu" open><summary>Reports</summary>
+      <a routerLink="/reports/user-profile-matrix" routerLinkActive="active">User profile matrix</a>
+    </details>
   </nav>  <div class="sidebar-footer"><span class="status-dot"></span>Local workspace<small>Tech Mahindra · Data engineering</small></div>
 </aside>
 <div class="workspace">

@@ -1,0 +1,16 @@
+<section class="matrix-grid" [attr.aria-label]="title">
+ <div class="matrix-grid-heading"><h2>{{title}}</h2><span>{{context}}</span></div>
+ <div class="matrix-scroller" [attr.aria-busy]="loading">
+  <table><thead><tr>@for(column of data.columns;track column){<th scope="col">{{column}}</th>}</tr></thead>
+  <tbody>@for(row of data.rows;track $index){
+   <tr [class.matrix-selected]="selectedRow===row" [class.matrix-clickable]="clickable" [attr.aria-selected]="clickable?selectedRow===row:null" (click)="choose(row)">
+    @for(value of row;track $index){<td>@if(clickable&&data.columns[$index]===linkColumn){<button type="button" class="text-button" [disabled]="loading" (click)="$event.stopPropagation();choose(row)">{{value??'NULL'}}</button>}@else{<span [class.muted]="value===null">{{value??'NULL'}}</span>}</td>}
+   </tr>
+  }@empty{<tr><td [attr.colspan]="data.columns.length||1" class="matrix-empty">{{data.message||'No entries for this selection.'}}</td></tr>}</tbody></table>
+ </div>
+ <div class="matrix-grid-footer">
+  <span>@if(data.rows.length){Rows {{data.page*data.size+1}}–{{data.page*data.size+data.rows.length}}@if(data.hasMore){ · More available}}@else{No rows}@if(loading){ · Loading…}</span>
+  @if(clickable){<span>{{hint}}</span>}
+  @if(data.page>0||data.hasMore){<div class="matrix-pages"><button type="button" class="button secondary" [disabled]="loading||data.page===0" (click)="pageChange.emit(data.page-1)">Previous</button><button type="button" class="button secondary" [disabled]="loading||!data.hasMore" (click)="pageChange.emit(data.page+1)">Next</button></div>}
+ </div>
+</section>

@@ -1,0 +1,24 @@
+<div class="page-heading"><div><div class="eyebrow">REPORTS</div><h1>User profile matrix</h1><p>Enter a user code to inspect its direct and channel-based profiles.</p></div></div>
+@if(error()){<div class="alert error" role="alert">{{error()}}</div>}
+<section class="panel">
+ <div class="report-controls">
+  <label>Database connection<select aria-label="Report database connection" [(ngModel)]="connectionId" (ngModelChange)="connectionChanged()"><option [ngValue]="null">Choose a connection</option>@for(c of api.connections();track c.id){<option [ngValue]="c.id">{{c.name}} · {{c.databaseType}} · {{c.schema}}</option>}</select></label>
+  <label>User code<input aria-label="Report user code" name="userCode" [(ngModel)]="userCode" (ngModelChange)="userChanged()" (keydown.enter)="loadMatrix()" [disabled]="!connectionId" maxlength="256" autocomplete="off" spellcheck="false" placeholder="Enter USER_CODE"></label>
+  <button type="button" class="button" (click)="loadMatrix()" [disabled]="!connectionId||!userCode.trim()||loadingMain()">Load matrix</button>
+ </div>
+ @if(!api.connections().length){<a class="text-button" routerLink="/connections">Configure a database connection</a>}
+</section>
+@if(selection();as selected){<p class="report-selection" role="status">{{selectedUser()}} / {{selected.type}} / {{selected.code}}@if(item();as child){ / {{child.value}}}</p>}
+@if(loadingMain()){<p role="status">Loading user profile matrix…</p>}
+@if(matrix();as grid){
+ <app-report-grid title="User profile matrix" [context]="selectedUser()" [data]="grid" [clickable]="true" linkColumn="PROFILE_CODE" [selectedRow]="selection()?.row??null" [loading]="loadingMain()" (rowSelect)="selectProfile($event)" (pageChange)="loadMatrix($event)"/>
+}
+@if(loadingDetail()){<p role="status">Loading profile details…</p>}
+@if(detailMessage()){<section class="panel" role="status">{{detailMessage()}}</section>}
+@if(detail();as grid){
+ <app-report-grid [title]="detailTitle()" [context]="selection()?.code??''" [data]="grid" [clickable]="hasThirdGrid()" [linkColumn]="selection()?.type==='FORMAT'?'FORMAT':'SCREEN_NAME'" [selectedRow]="item()?.row??null" [hint]="selection()?.type==='FORMAT'?'Select a row to view format elements':'Select a row to view screen panels'" [loading]="loadingDetail()" (rowSelect)="selectItem($event)" (pageChange)="loadDetail($event)"/>
+}
+@if(loadingThird()){<p role="status">Loading {{selection()?.type==='FORMAT'?'format elements':'screen panels'}}…</p>}
+@if(third();as grid){
+ <app-report-grid [title]="selection()?.type==='FORMAT'?'Format elements':'Screen panels'" [context]="item()?.value??''" [data]="grid" [loading]="loadingThird()" (pageChange)="loadThird($event)"/>
+}

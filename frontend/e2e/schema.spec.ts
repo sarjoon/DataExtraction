@@ -47,6 +47,7 @@ test('Sybase connection form uses ASE database and owner without bundling a driv
  await page.route('**/api/**',async route=>{const path=new URL(route.request().url()).pathname;await route.fulfill({json:path==='/api/connections'?[]:path==='/api/status'?{status:'UP',database:'H2'}:{}});});
  await page.goto('/connections');await page.getByRole('combobox',{name:'Database type',exact:true}).selectOption('SYBASE');
  await expect(page.getByRole('combobox',{name:'Connection type',exact:true})).toHaveValue('ASE');await expect(page.getByLabel('Port',{exact:true})).toHaveValue('5000');
- await expect(page.getByLabel('Schema / owner',{exact:true})).toHaveValue('dbo');await expect(page.getByLabel('Sybase password',{exact:true})).toBeVisible();
+ await expect(page.getByLabel('Schema / owner',{exact:true})).toHaveValue('');await expect(page.getByLabel('Sybase password',{exact:true})).toBeVisible();
+ await expect(page.getByText(/Leave blank to use the current database user/)).toBeVisible();
  await expect(page.getByText(/edac.sybase.driver-path=/)).toBeVisible();
 });

@@ -165,7 +165,7 @@ public class RegistryService {
     private String connectionSchema(ConnectionInput input,String password) {
         if(input.schema()!=null&&!input.schema().isBlank()){identifier(input.schema());return "SYBASE".equals(input.databaseType())?input.schema().trim():identifier(input.schema());}
         if("SYBASE".equals(input.databaseType())){
-            var profile=new ConnectionProfile(0,input.name(),"SYBASE",input.host(),input.port(),"ASE",input.databaseName(),sourceUrl(input),input.username(),"dbo",true,true);
+            var profile=new ConnectionProfile(0,input.name(),"SYBASE",input.host(),input.port(),"ASE",input.databaseName(),sourceUrl(input),input.username(),"",true,true);
             try(var c=sybase.open(profile,password);var s=c.createStatement();var r=s.executeQuery("SELECT USER_NAME()")){if(r.next()){String owner=r.getString(1);identifier(owner);return owner;}throw new SQLException();}catch(SQLException e){throw new IllegalArgumentException("Could not determine the Sybase default owner. Enter the owner explicitly (for example dbo), or check credentials.");}
         }
         var properties=new Properties();properties.setProperty("user",input.username().trim());properties.setProperty("password",password);

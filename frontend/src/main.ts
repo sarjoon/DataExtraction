@@ -11,6 +11,7 @@ import { TriggersComponent } from './app/triggers';
 import { SnapshotComponent } from './app/snapshot';
 import { ExtractionComponent } from './app/extraction';
 import { SchemaComponent } from './app/schema';
+import { UserProfileMatrixComponent } from './app/user-profile-matrix';
 bootstrapApplication(AppComponent,{providers:[provideHttpClient(),provideRouter([
   {path:'',pathMatch:'full',redirectTo:'overview'},
   {path:'overview',component:OverviewComponent},
@@ -30,5 +31,7 @@ bootstrapApplication(AppComponent,{providers:[provideHttpClient(),provideRouter(
   {path:'snapshot/schema',component:SchemaComponent,data:{view:'compare'}},
   {path:'snapshot/schema/history',component:SchemaComponent,data:{view:'history'}},
   {path:'snapshot/schema/report/:id',component:SchemaComponent,data:{view:'report'}},
+  {path:'reports',pathMatch:'full',redirectTo:'reports/user-profile-matrix'},
+  {path:'reports/user-profile-matrix',component:UserProfileMatrixComponent},
   {path:'**',redirectTo:'overview'}
 ])]}).catch(console.error);
