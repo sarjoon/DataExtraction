@@ -41,6 +41,9 @@ public class SchemaMetadata {
             for(String name:objects.get("Tables")){
                 progress.accept(name);var columns=new ArrayList<Column>();
                 try(var rows=metadata.getColumns(catalog,SybaseSource.pattern(metadata,schema),SybaseSource.pattern(metadata,name),"%")){while(rows.next()){
+                    // Oracle COLUMN_DEF is LONG: consume it once before later JDBC columns
+                    // (such as ORDINAL_POSITION) discard its stream.
+                    String columnDefault=rows.getString("COLUMN_DEF");
                     if(!schema.equals(rows.getString("TABLE_SCHEM"))||!name.equals(rows.getString("TABLE_NAME")))continue;
                     String nativeType=rows.getString("TYPE_NAME");int jdbcType=rows.getInt("DATA_TYPE"),size=rows.getInt("COLUMN_SIZE"),scale=rows.getInt("DECIMAL_DIGITS");
                     var properties=new LinkedHashMap<String,String>();properties.put("Position",Integer.toString(rows.getInt("ORDINAL_POSITION")));
@@ -48,7 +51,7 @@ public class SchemaMetadata {
                     properties.put("Precision",isNumber(jdbcType)?Integer.toString(numericPrecision(jdbcType,size)):"");
                     properties.put("Scale",type.equals("ORACLE")&&nativeType.equalsIgnoreCase("DATE")?"0":isNumber(jdbcType)||jdbcType==Types.TIMESTAMP||jdbcType==Types.TIMESTAMP_WITH_TIMEZONE?Integer.toString(scale):"");
                     int nullable=rows.getInt("NULLABLE");properties.put("Nullable",rows.wasNull()?"Unknown":nullable==DatabaseMetaData.columnNullable?"Yes":nullable==DatabaseMetaData.columnNoNulls?"No":"Unknown");
-                    properties.put("Default",Objects.toString(rows.getString("COLUMN_DEF"),""));
+                    properties.put("Default",Objects.toString(columnDefault,""));
                     String identity=optional(rows,"IS_AUTOINCREMENT"),generated=optional(rows,"IS_GENERATEDCOLUMN");properties.put("Identity",identity.isEmpty()?"Not reported":identity);properties.put("Generated",generated.isEmpty()?"Not reported":generated);
                     columns.add(new Column(rows.getString("COLUMN_NAME"),nativeType,logical(jdbcType,nativeType,type),properties));
                 }}
@@ -90,7 +93,7 @@ public class SchemaMetadata {
     }
     private void checks(Connection c,String type,String schema,String table,Map<String,String> result)throws SQLException{
         if(type.equals("H2"))query(c,"SELECT tc.CONSTRAINT_NAME, cc.CHECK_CLAUSE FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.CHECK_CONSTRAINTS cc ON cc.CONSTRAINT_CATALOG=tc.CONSTRAINT_CATALOG AND cc.CONSTRAINT_SCHEMA=tc.CONSTRAINT_SCHEMA AND cc.CONSTRAINT_NAME=tc.CONSTRAINT_NAME WHERE tc.TABLE_SCHEMA=? AND tc.TABLE_NAME=?",List.of(schema,table),r->result.put("Check "+r.getString(1),r.getString(2)));
-        else if(type.equals("ORACLE"))query(c,"SELECT CONSTRAINT_NAME, SEARCH_CONDITION FROM ALL_CONSTRAINTS WHERE OWNER=? AND TABLE_NAME=? AND CONSTRAINT_TYPE='C'",List.of(schema,table),r->result.put("Check "+r.getString(1),Objects.toString(r.getString(2),"Not reported")));
+        else if(type.equals("ORACLE"))query(c,"SELECT CONSTRAINT_NAME, SEARCH_CONDITION FROM ALL_CONSTRAINTS WHERE OWNER=? AND TABLE_NAME=? AND CONSTRAINT_TYPE='C'",List.of(schema,table),r->{String name=r.getString(1),condition=r.getString(2);result.put("Check "+name,Objects.toString(condition,"Not reported"));});
         else{
             var fragments=new LinkedHashMap<String,StringBuilder>();
             query(c,"SELECT o.name, sc.text FROM sysconstraints cs JOIN sysobjects t ON t.id=cs.tableid JOIN sysusers u ON u.uid=t.uid JOIN sysobjects o ON o.id=cs.constrid JOIN syscomments sc ON sc.id=cs.constrid WHERE u.name=? AND t.name=? AND (cs.status & 128)=128 AND o.type<>'TR' ORDER BY o.name, sc.colid",List.of(schema,table),r->fragments.computeIfAbsent(r.getString(1),k->new StringBuilder()).append(Objects.toString(r.getString(2),"Not reported")));
