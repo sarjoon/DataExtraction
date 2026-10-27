@@ -331,14 +331,14 @@ class EdacIntegrationTest {
             byte[] workbook=workbooks.generate(profile.id(),List.of(manual.id(),csv.id(),entries.stream().filter(t->t.name().equals("DISCOVER_A")).findFirst().orElseThrow().id()));
             try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbook))){
                 var spec=wb.getSheetAt(0);var f=new org.apache.poi.ss.usermodel.DataFormatter();
-                assertThat(f.formatCellValue(spec.getRow(2).getCell(5)).toLowerCase(java.util.Locale.ROOT)).startsWith("file type");
-                assertThat(f.formatCellValue(spec.getRow(2).getCell(6)).toLowerCase(java.util.Locale.ROOT)).startsWith("load strategy");
-                assertThat(f.formatCellValue(spec.getRow(2).getCell(4)).toLowerCase(java.util.Locale.ROOT)).startsWith("update frequency");
-                assertThat(spec.getRow(3).getCell(4).getStringCellValue()).isEqualTo("Daily");
-                assertThat(spec.getRow(4).getCell(4).getStringCellValue()).isEqualTo("Weekly");
-                assertThat(spec.getRow(5).getCell(4).getStringCellValue()).isEqualTo("Weekly");
-                assertThat(spec.getRow(3).getCell(5).getStringCellValue()).isEqualTo("Master");assertThat(spec.getRow(3).getCell(6).getStringCellValue()).isEqualTo("Full");
-                assertThat(spec.getRow(4).getCell(5).getStringCellValue()).isEqualTo("Tech Recon");assertThat(spec.getRow(5).getCell(6).getStringCellValue()).isEqualTo("Delta");
+                assertThat(f.formatCellValue(spec.getRow(2).getCell(4)).toLowerCase(java.util.Locale.ROOT)).startsWith("file type");
+                assertThat(f.formatCellValue(spec.getRow(2).getCell(5)).toLowerCase(java.util.Locale.ROOT)).startsWith("load strategy");
+                assertThat(f.formatCellValue(spec.getRow(2).getCell(3)).toLowerCase(java.util.Locale.ROOT)).startsWith("update frequency");
+                assertThat(spec.getRow(3).getCell(3).getStringCellValue()).isEqualTo("Daily");
+                assertThat(spec.getRow(4).getCell(3).getStringCellValue()).isEqualTo("Weekly");
+                assertThat(spec.getRow(5).getCell(3).getStringCellValue()).isEqualTo("Weekly");
+                assertThat(spec.getRow(3).getCell(4).getStringCellValue()).isEqualTo("Master");assertThat(spec.getRow(3).getCell(5).getStringCellValue()).isEqualTo("Full");
+                assertThat(spec.getRow(4).getCell(4).getStringCellValue()).isEqualTo("Tech Recon");assertThat(spec.getRow(5).getCell(5).getStringCellValue()).isEqualTo("Delta");
             }
             mvc.perform(multipart("/api/connections/"+other+"/tables/import").file(new MockMultipartFile("file","roundtrip.xlsx","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",workbook)).with(csrf())).andExpect(status().isOk());
             assertThat(registry.tables(other)).extracting(Models.TableEntry::fileType).containsExactly("Tech Recon","Logs","Master");
@@ -351,7 +351,7 @@ class EdacIntegrationTest {
         var profile=registry.save(new Models.ConnectionInput(database,"H2",null,null,"MEMORY",database,"sa","PUBLIC",""));
         try(var source=java.sql.DriverManager.getConnection(profile.jdbcUrl(),"sa","");var sql=source.createStatement()) {
             sql.execute("CREATE TABLE CUSTOMER(ID BIGINT PRIMARY KEY,NAME VARCHAR(80),BALANCE DECIMAL(15,2) DEFAULT 0,BUSINESS_DATE DATE,UPDATED_AT TIMESTAMP)");
-            sql.execute("CREATE TABLE ACCOUNT(ID BIGINT PRIMARY KEY,CUSTOMER_ID BIGINT REFERENCES CUSTOMER(ID))");
+            sql.execute("CREATE TABLE ACCOUNT(ID BIGINT,CUSTOMER_ID BIGINT REFERENCES CUSTOMER(ID),PRIMARY KEY(ID,CUSTOMER_ID))");
             registry.append(profile.id(),List.of("CUSTOMER","ACCOUNT"),"MANUAL");
             var tables=registry.tables(profile.id());long customer=tables.stream().filter(t->t.name().equals("CUSTOMER")).findFirst().orElseThrow().id();
             long account=tables.stream().filter(t->t.name().equals("ACCOUNT")).findFirst().orElseThrow().id();
@@ -359,24 +359,26 @@ class EdacIntegrationTest {
             byte[] bytes=workbooks.generate(profile.id(),List.of(customer,account));
             try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes));var template=new XSSFWorkbook(new org.springframework.core.io.ClassPathResource("templates/EDAC_Mapping_Template.xlsx").getInputStream())) {
                 assertThat(wb.getNumberOfSheets()).isEqualTo(3);assertThat(wb.getSheetName(0)).isEqualTo("FIle Spec");
-                var spec=wb.getSheetAt(0);assertThat(spec.getMergedRegion(0).formatAsString()).isEqualTo("P2:AK2");
+                var spec=wb.getSheetAt(0);assertThat(spec.getMergedRegion(0).formatAsString()).isEqualTo("O2:AJ2");
                 assertThat(spec.getRow(3).getCell(1).getStringCellValue()).isEqualTo("CUSTOMER");
-                assertThat(spec.getRow(3).getCell(3).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
-                assertThat(spec.getRow(3).getCell(4).getStringCellValue()).isEqualTo("Daily");
-                assertThat(spec.getRow(3).getCell(8).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
-                assertThat(spec.getRow(2).getCell(2).getStringCellValue()).isEqualTo("Link");
+                assertThat(spec.getRow(3).getCell(2).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+                assertThat(spec.getRow(3).getCell(3).getStringCellValue()).isEqualTo("Daily");
+                assertThat(spec.getRow(3).getCell(7).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+                assertThat(spec.getRow(2).getCell(2).getStringCellValue()).isEqualTo("Brief Description of file");
                 for(int r=3;r<=4;r++) {
-                    var link=spec.getRow(r).getCell(2);
-                    assertThat(link.getStringCellValue()).isEqualTo("Go to sheet");
+                    var link=spec.getRow(r).getCell(1);
+                    assertThat(link.getStringCellValue()).isEqualTo(wb.getSheetName(r-2));
                     assertThat(link.getHyperlink().getType()).isEqualTo(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
                     assertThat(link.getHyperlink().getAddress()).isEqualTo("'"+wb.getSheetName(r-2)+"'!A1");
-                    assertThat(spec.getRow(r).getCell(1).getHyperlink()).isNull();
+                    assertThat(spec.getRow(r).getCell(6).getStringCellValue()).isEqualTo("B"); assertThat(spec.getRow(r).getCell(8).getStringCellValue()).isEqualTo(r==3?"ID":"ID,CUSTOMER_ID");
                 }
+                assertThat(spec.getRow(2).getCell(6).getStringCellValue()).isEqualTo("File Format (F - Fixed Width, P - Pipe Delimited, T - Tab Delimited, PQ - Pipe With Quotes, B - Bell Delimited, || delimited )");
                 for(int c=2;c<36;c++) {
-                    assertThat(spec.getColumnWidth(c+1)).isEqualTo(template.getSheetAt(0).getColumnWidth(c));
-                    assertThat(spec.getRow(2).getCell(c+1).getStringCellValue()).isEqualTo(template.getSheetAt(0).getRow(2).getCell(c).getStringCellValue());
+                    if(c==6)continue;
+                    assertThat(spec.getColumnWidth(c)).isEqualTo(template.getSheetAt(0).getColumnWidth(c));
+                    assertThat(spec.getRow(2).getCell(c).getStringCellValue()).isEqualTo(template.getSheetAt(0).getRow(2).getCell(c).getStringCellValue());
                 }
-                assertThat(spec.getDataValidations().get(0).getRegions().getCellRangeAddresses()[0].formatAsString()).isEqualTo("P4:AK5");
+                assertThat(spec.getDataValidations().get(0).getRegions().getCellRangeAddresses()[0].formatAsString()).isEqualTo("O4:AJ5");
                 var customerSheet=wb.getSheet("CUSTOMER");var accountSheet=wb.getSheet("ACCOUNT");
                 assertThat(customerSheet.getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");
                 assertThat(customerSheet.getRow(9).getCell(3).getNumericCellValue()).isEqualTo(19);
@@ -394,7 +396,7 @@ class EdacIntegrationTest {
                     assertThat(sheet.getRow(0).getCell(0).getHyperlink().getAddress()).isEqualTo("'FIle Spec'!A1");
                 }
                 assertThat(customerSheet.getRow(13).getCell(0).getStringCellValue()).isEqualTo("Trailer");
-                assertThat(accountSheet.getRow(10).getCell(5).getStringCellValue()).isEqualTo("FK");
+                assertThat(accountSheet.getRow(10).getCell(5).getStringCellValue()).isEqualTo("PK,FK");
                 var formatter=new org.apache.poi.ss.usermodel.DataFormatter();
                 for(int r=0;r<7;r++)for(int c=0;c<11;c++)assertThat(formatter.formatCellValue(customerSheet.getRow(r).getCell(c))).isEqualTo(formatter.formatCellValue(accountSheet.getRow(r).getCell(c)));
                 for(int r=0;r<5;r++)for(int c=0;c<11;c++)assertThat(formatter.formatCellValue(customerSheet.getRow(13+r).getCell(c))).isEqualTo(formatter.formatCellValue(accountSheet.getRow(11+r).getCell(c)));
@@ -426,7 +428,7 @@ class EdacIntegrationTest {
                 assertThat(wb.getNumberOfSheets()).isEqualTo(3);
                 assertThat(wb.getSheet("MISSING_TABLE")).isNull();
                 assertThat(wb.getSheet("PRESENT_TABLE").getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");
-                assertThat(wb.getSheetAt(0).getRow(3).getCell(2).getHyperlink().getAddress()).isEqualTo("'PRESENT_TABLE'!A1");
+                assertThat(wb.getSheetAt(0).getRow(3).getCell(1).getHyperlink().getAddress()).isEqualTo("'PRESENT_TABLE'!A1");
                 var report=wb.getSheet("Generation Report");
                 assertThat(report.getRow(1).getCell(0).getStringCellValue()).isEqualTo("Selected: 2 | Generated: 1 | Skipped: 1");
                 assertThat(wb.getSheetAt(0).getRow(0).getCell(3).getHyperlink().getAddress()).isEqualTo("'Generation Report'!A1");

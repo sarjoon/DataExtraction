@@ -33,6 +33,7 @@ public class MappingWorkbookService {
         }
         try(var input=new ClassPathResource("templates/EDAC_Mapping_Template.xlsx").getInputStream();var wb=new XSSFWorkbook(input);var output=new ByteArrayOutputStream()) {
             var spec=wb.getSheet("FIle Spec");var prototype=wb.getSheetAt(1);
+            spec.getRow(2).getCell(6).setCellValue("File Format (F - Fixed Width, P - Pipe Delimited, T - Tab Delimited, PQ - Pipe With Quotes, B - Bell Delimited, || delimited )");
             int trailer=findTrailer(prototype);var specRow=spec.getRow(3);
             short specHeight=specRow.getHeight();CellStyle[] specStyles=new CellStyle[36];
             for(int c=0;c<36;c++)specStyles[c]=specRow.getCell(c).getCellStyle();
@@ -74,18 +75,20 @@ public class MappingWorkbookService {
                 var row=spec.createRow(3+serial);row.setHeight(specHeight);
                 for(int c=0;c<36;c++)row.createCell(c).setCellStyle(specStyles[c]);
                 for(int c=0;c<36;c++)put(row.getCell(c),defaults[c]);
-                // Link is inserted at C below, moving these values into F and G.
                 put(row.getCell(3),table.updateFrequency());put(row.getCell(4),table.fileType());put(row.getCell(5),table.loadStrategy());
+                put(row.getCell(6),"B");
+                put(row.getCell(8),rows.stream().filter(f->f.key()!=null && Arrays.stream(f.key().split(",")).anyMatch(k->"PK".equalsIgnoreCase(k.trim())))
+                    .map(f->f.column().name()).collect(java.util.stream.Collectors.joining(",")));
                 put(row.getCell(0),++serial);put(row.getCell(1),label);
                 var link=wb.getCreationHelper().createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
                 link.setAddress("'"+name.replace("'","''")+"'!A1");row.getCell(1).setHyperlink(link);
             }
-            addNavigationColumn(wb,spec);
-            if(serial>0)validation(spec,3,2+serial,15,36,new String[]{"Y","N"});
+            styleFileLinks(wb,spec);
+            if(serial>0)validation(spec,3,2+serial,14,35,new String[]{"Y","N"});
             if(serial>0){
-                validation(spec,3,2+serial,4,4,RegistryService.UPDATE_FREQUENCIES.toArray(String[]::new));
-                validation(spec,3,2+serial,5,5,RegistryService.FILE_TYPES.toArray(String[]::new));
-                validation(spec,3,2+serial,6,6,RegistryService.LOAD_STRATEGIES.toArray(String[]::new));
+                validation(spec,3,2+serial,3,3,RegistryService.UPDATE_FREQUENCIES.toArray(String[]::new));
+                validation(spec,3,2+serial,4,4,RegistryService.FILE_TYPES.toArray(String[]::new));
+                validation(spec,3,2+serial,5,5,RegistryService.LOAD_STRATEGIES.toArray(String[]::new));
             }
             for(int i=originalCount-1;i>=1;i--)wb.removeSheetAt(i);
             if(!skipped.isEmpty()) {
@@ -120,25 +123,14 @@ public class MappingWorkbookService {
         var font=wb.createFont();font.setColor(IndexedColors.BLUE.getIndex());font.setUnderline(Font.U_SINGLE);
         style.setFont(font);cell.setCellStyle(style);
     }
-    private static void addNavigationColumn(XSSFWorkbook wb,XSSFSheet spec) {
-        // The reference template has 36 columns. Insert Link after File Name.
-        int[] widths=new int[36];
-        for(int c=2;c<36;c++)widths[c]=spec.getColumnWidth(c);
-        spec.shiftColumns(2,35,1);
-        for(int c=2;c<36;c++)spec.setColumnWidth(c+1,widths[c]);
-        spec.setColumnWidth(2,16*256);
-        var header=spec.getRow(2).createCell(2);
-        header.setCellValue("Link");header.setCellStyle(spec.getRow(2).getCell(1).getCellStyle());
+    private static void styleFileLinks(XSSFWorkbook wb,XSSFSheet spec) {
         if(spec.getLastRowNum()<3)return;
         var style=wb.createCellStyle();style.cloneStyleFrom(spec.getRow(3).getCell(1).getCellStyle());
         var font=wb.createFont();var original=wb.getFontAt(style.getFontIndex());
         font.setFontName(original.getFontName());font.setFontHeight(original.getFontHeight());
         font.setColor(IndexedColors.BLUE.getIndex());font.setUnderline(Font.U_SINGLE);style.setFont(font);
         for(int r=3;r<=spec.getLastRowNum();r++) {
-            var row=spec.getRow(r);var filename=row.getCell(1);
-            var link=wb.getCreationHelper().createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
-            link.setAddress(filename.getHyperlink().getAddress());filename.removeHyperlink();
-            var cell=row.createCell(2);cell.setCellValue("Go to sheet");cell.setCellStyle(style);cell.setHyperlink(link);
+            spec.getRow(r).getCell(1).setCellStyle(style);
         }
     }
     private static Object[] detail(MappingField field,int serial,String databaseType,XSSFSheet prototype) {
