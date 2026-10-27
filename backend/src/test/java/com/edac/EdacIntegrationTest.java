@@ -428,7 +428,10 @@ class EdacIntegrationTest {
                 assertThat(wb.getNumberOfSheets()).isEqualTo(3);
                 assertThat(wb.getSheet("MISSING_TABLE")).isNull();
                 assertThat(wb.getSheet("PRESENT_TABLE").getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");
-                assertThat(wb.getSheetAt(0).getRow(3).getCell(1).getHyperlink().getAddress()).isEqualTo("'PRESENT_TABLE'!A1");
+                var fileName=wb.getSheetAt(0).getRow(3).getCell(1); // Column B owns the table link.
+                assertThat(fileName.getStringCellValue()).isEqualTo("PRESENT_TABLE");
+                assertThat(fileName.getHyperlink()).as("File Name hyperlink in column B").isNotNull();
+                assertThat(fileName.getHyperlink().getAddress()).isEqualTo("'PRESENT_TABLE'!A1");
                 var report=wb.getSheet("Generation Report");
                 assertThat(report.getRow(1).getCell(0).getStringCellValue()).isEqualTo("Selected: 2 | Generated: 1 | Skipped: 1");
                 assertThat(wb.getSheetAt(0).getRow(0).getCell(3).getHyperlink().getAddress()).isEqualTo("'Generation Report'!A1");
