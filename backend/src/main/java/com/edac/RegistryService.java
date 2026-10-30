@@ -92,7 +92,7 @@ public class RegistryService {
     public List<TableEntry> tables(long id) {
         connection(id);
         return db.query("SELECT * FROM table_registry WHERE connection_id=? ORDER BY schema_name,table_name",(r,n)->new TableEntry(
-            r.getLong("id"),r.getLong("connection_id"),r.getString("schema_name"),r.getString("table_name"),r.getString("source"),r.getString("created_at"),r.getString("file_type"),r.getString("load_strategy"),r.getString("update_frequency")),id);
+            r.getLong("id"),r.getLong("connection_id"),r.getString("schema_name"),r.getString("table_name"),r.getString("source"),r.getString("created_at"),r.getString("file_type"),r.getString("load_strategy"),r.getString("update_frequency"),r.getString("brief_description")),id);
     }
     public TableEntry table(long connectionId,long tableId) {
         return tables(connectionId).stream().filter(t->t.id()==tableId).findFirst()

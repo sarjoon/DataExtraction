@@ -148,6 +148,8 @@ Unquoted identifiers are normalised to uppercase and may contain letters, digits
 
 ## Mapping table and column selection
 
+Flyway V18 adds nullable `TABLE_REGISTRY.BRIEF_DESCRIPTION` (up to 2,000 characters) in the EDAC H2 database. Populate this field for the registered table to display its description in column C, **Brief Description of file**, on the mapping workbook's File Spec tab. Empty descriptions remain blank. The migration runs on application startup and preserves existing table registrations. Description entry through the UI and imports is not included.
+
 The Mapping workbook screen lists configured tables for the selected source connection, with individual and Select all checkboxes. Selecting one table reads its column structure from Oracle ALL_TAB_COLUMNS or H2 INFORMATION_SCHEMA.COLUMNS using bound owner and table parameters. Selecting multiple tables hides column details and displays an explanatory message.
 
 Every column is included by default. Unchecking a column saves an exclusion in H2; checking it again deletes that exclusion. Flyway V3 creates COLUMN_EXCLUSION, keyed by the configured table ID and exact column name, keeping preferences separate by connection, schema and table. Preferences survive reloads and are applied when columns are fetched again. Table selections themselves are temporary. Source byte length and character length are shown separately; these are not fixed-length output definitions.

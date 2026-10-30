@@ -75,6 +75,7 @@ public class MappingWorkbookService {
                 var row=spec.createRow(3+serial);row.setHeight(specHeight);
                 for(int c=0;c<36;c++)row.createCell(c).setCellStyle(specStyles[c]);
                 for(int c=0;c<36;c++)put(row.getCell(c),defaults[c]);
+                put(row.getCell(2),table.briefDescription());
                 put(row.getCell(3),table.updateFrequency());put(row.getCell(4),table.fileType());put(row.getCell(5),table.loadStrategy());
                 put(row.getCell(6),"B");
                 put(row.getCell(8),rows.stream().filter(f->f.key()!=null && Arrays.stream(f.key().split(",")).anyMatch(k->"PK".equalsIgnoreCase(k.trim())))

@@ -24,7 +24,8 @@ public final class Models {
         boolean passwordSaved,boolean readOnly) {
         public ConnectionProfile(long id,String name,String databaseType,String host,int port,String connectionType,String databaseName,String jdbcUrl,String username,String schema,boolean passwordSaved){this(id,name,databaseType,host,port,connectionType,databaseName,jdbcUrl,username,schema,passwordSaved,true);}
     }
-    public record TableEntry(long id, long connectionId, String schema, String name, String source, String createdAt,String fileType,String loadStrategy,String updateFrequency) {
+    public record TableEntry(long id, long connectionId, String schema, String name, String source, String createdAt,String fileType,String loadStrategy,String updateFrequency,String briefDescription) {
+        public TableEntry(long id,long connectionId,String schema,String name,String source,String createdAt,String fileType,String loadStrategy,String updateFrequency){this(id,connectionId,schema,name,source,createdAt,fileType,loadStrategy,updateFrequency,null);}
         public TableEntry(long id,long connectionId,String schema,String name,String source,String createdAt){this(id,connectionId,schema,name,source,createdAt,"","","Daily");}
         public TableEntry(long id,long connectionId,String schema,String name,String source,String createdAt,String fileType,String loadStrategy){this(id,connectionId,schema,name,source,createdAt,fileType,loadStrategy,"Daily");}
     }

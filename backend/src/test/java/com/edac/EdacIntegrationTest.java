@@ -156,7 +156,7 @@ class EdacIntegrationTest {
         return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
     }
     @Test void usesH2ConfigurationAndSavedCredentialsForOracle() throws Exception {
-        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("17"));
+        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("18"));
         long id=connection();
         when(oracle.test(any(),eq("test-secret"))).thenReturn(new Models.TestResult(true,"Oracle test",List.of()));
         when(oracle.discover(any(),eq("test-secret"))).thenReturn(List.of(new Models.TableName("APP","CUSTOMER"),new Models.TableName("APP","ACCOUNT")));
@@ -355,13 +355,17 @@ class EdacIntegrationTest {
             registry.append(profile.id(),List.of("CUSTOMER","ACCOUNT"),"MANUAL");
             var tables=registry.tables(profile.id());long customer=tables.stream().filter(t->t.name().equals("CUSTOMER")).findFirst().orElseThrow().id();
             long account=tables.stream().filter(t->t.name().equals("ACCOUNT")).findFirst().orElseThrow().id();
+            String description="Customer master data & account details";
+            db.update("UPDATE table_registry SET brief_description=? WHERE id=?",description,customer);
+            assertThat(registry.table(profile.id(),customer).briefDescription()).isEqualTo(description);
             db.update("INSERT INTO column_exclusion(table_id,column_name) VALUES(?,?)",customer,"NAME");
             byte[] bytes=workbooks.generate(profile.id(),List.of(customer,account));
             try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes));var template=new XSSFWorkbook(new org.springframework.core.io.ClassPathResource("templates/EDAC_Mapping_Template.xlsx").getInputStream())) {
                 assertThat(wb.getNumberOfSheets()).isEqualTo(3);assertThat(wb.getSheetName(0)).isEqualTo("FIle Spec");
                 var spec=wb.getSheetAt(0);assertThat(spec.getMergedRegion(0).formatAsString()).isEqualTo("O2:AJ2");
                 assertThat(spec.getRow(3).getCell(1).getStringCellValue()).isEqualTo("CUSTOMER");
-                assertThat(spec.getRow(3).getCell(2).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+                assertThat(spec.getRow(3).getCell(2).getStringCellValue()).isEqualTo(description);
+                assertThat(spec.getRow(4).getCell(2).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
                 assertThat(spec.getRow(3).getCell(3).getStringCellValue()).isEqualTo("Daily");
                 assertThat(spec.getRow(3).getCell(7).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
                 assertThat(spec.getRow(2).getCell(2).getStringCellValue()).isEqualTo("Brief Description of file");
