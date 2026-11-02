@@ -8,7 +8,17 @@ interface Column {position:number;name:string;dataType:string;byteLength:number|
 <select id="mapping-connection" [ngModel]="api.selectedId()" (ngModelChange)="changeConnection($event)" [disabled]="api.busy() || saving() || exporting()">
 <option [ngValue]="null" disabled>Select a connection</option>
 @for(c of api.connections();track c.id){<option [ngValue]="c.id">{{c.name}} — {{c.schema}}</option>}
-</select><div class="export-actions"><button class="button" type="button" (click)="generate()" [disabled]="!selected().size || saving() || exporting() || api.busy()">{{exporting()?'Generating workbook…':'Generate mapping workbook'}}</button><span>{{selected().size}} table(s) selected</span></div>
+</select>
+<label for="bau-available">Is a BAU mapping workbook available?</label>
+<select id="bau-available" [ngModel]="bauChoice()" (ngModelChange)="chooseBau($event)" [disabled]="exporting()">
+<option value="" disabled>Select an option</option><option value="no">No, generate new mappings only</option><option value="yes">Yes, include a BAU workbook</option>
+</select>
+@if(bauChoice()==='yes'){
+<label for="bau-workbook">BAU mapping workbook (.xlsx, up to 5 MB)</label>
+<input id="bau-workbook" type="file" accept=".xlsx" (change)="selectBauFile($event)" [disabled]="exporting()">
+<p class="note">BAU tables appear first and keep their existing worksheets. Matching table registrations and their saved column exclusions will be permanently removed from this connection after successful generation. Change History and System Specification tabs are excluded.</p>
+}
+<div class="export-actions"><button class="button" type="button" (click)="generate()" [disabled]="!canGenerate() || saving() || exporting() || api.busy()">{{exporting()?'Generating workbook…':'Generate mapping workbook'}}</button><span>{{selected().size}} new table(s) selected</span></div>
 @if(exportError()){<p role="alert" class="alert error">{{exportError()}}</p>}
 @if(exportMessage()){<p role="status">{{exportMessage()}}</p>}
 @if(api.selected()?.databaseType==='ORACLE'){<p class="note">Oracle uses standard metadata until the custom mapping query is supplied.</p>}
@@ -35,26 +45,36 @@ interface Column {position:number;name:string;dataType:string;byteLength:number|
 export class MappingComponent implements OnDestroy {
  api=inject(Api); selected=signal(new Set<number>()); columns=signal<Column[]>([]);
  exporting=signal(false); exportError=signal(''); exportMessage=signal('');
+ bauChoice=signal('');bauFile=signal<File|undefined>(undefined);
+ canGenerate=computed(()=>this.api.selectedId()!==null && (this.bauChoice()==='yes'?!!this.bauFile():this.bauChoice()==='no' && this.selected().size>0));
  loading=signal(false); saving=signal(false); error=signal(''); feedback=signal('');
  private version=0; private connection:number|null=null; private destroyed=false;
  allSelected=computed(()=>this.api.tables().length>0 && this.selected().size===this.api.tables().length);
  single=computed(()=>this.selected().size===1?this.api.tables().find(t=>this.selected().has(t.id)):undefined);
  constructor(){effect(()=>{
    const id=this.api.selectedId(); const tables=this.api.tables();
-   if(this.connection!==id){this.connection=id;this.selected.set(new Set());}
+   if(this.connection!==id){this.connection=id;this.selected.set(new Set());this.bauChoice.set('');this.bauFile.set(undefined);}
    const valid=new Set([...this.selected()].filter(id=>tables.some(t=>t.id===id)));
    if(valid.size!==this.selected().size)this.selected.set(valid);
    const table=this.single(); void this.load(id,table?.id);
  });}
  async generate(){
-   const id=this.api.selectedId();if(id===null||!this.selected().size||this.saving()||this.exporting())return;
+   const id=this.api.selectedId();if(id===null||!this.canGenerate()||this.saving()||this.exporting())return;
    const ids=this.api.tables().filter(t=>this.selected().has(t.id)).map(t=>t.id);
    this.exporting.set(true);this.exportError.set('');this.exportMessage.set('');
-   try{const blob=await this.api.downloadWorkbook(id,ids);if(this.destroyed)return;
+   const bau=this.bauChoice()==='yes'?this.bauFile():undefined;
+   try{const blob=await this.api.downloadWorkbook(id,ids,bau);if(this.destroyed)return;
      const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='Extraction_Framework_Mapping.xlsx';document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
-     this.exportMessage.set('Mapping workbook downloaded. Only included columns were exported.');
+     this.exportMessage.set(bau?'Mapping workbook downloaded. BAU tables appear first in blue; new tables follow in green. Matching BAU registrations were permanently removed from this connection.':'Mapping workbook downloaded. Only included columns were exported.');
+     if(bau){try{await this.api.refresh();}catch{this.exportMessage.update(m=>m+' Reload the page to refresh the table list.');}}
    }catch(e:any){if(!this.destroyed)this.exportError.set(e?.message??'Workbook generation failed.');}
    finally{this.exporting.set(false);}
+ }
+ chooseBau(value:string){this.bauChoice.set(value);this.bauFile.set(undefined);this.exportError.set('');}
+ selectBauFile(event:Event){
+   const input=event.target as HTMLInputElement;const file=input.files?.[0];this.bauFile.set(undefined);this.exportError.set('');
+   if(file && (!file.name.toLowerCase().endsWith('.xlsx') || file.size>5*1024*1024)){this.exportError.set('Upload a BAU .xlsx workbook no larger than 5 MB.');input.value='';return;}
+   this.bauFile.set(file);
  }
  ngOnDestroy(){this.destroyed=true;this.version++;}
  changeConnection(id:number){void this.api.run(()=>this.api.select(id));}

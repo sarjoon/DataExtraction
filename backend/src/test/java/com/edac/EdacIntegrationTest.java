@@ -375,6 +375,8 @@ class EdacIntegrationTest {
                     assertThat(link.getHyperlink().getType()).isEqualTo(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
                     assertThat(link.getHyperlink().getAddress()).isEqualTo("'"+wb.getSheetName(r-2)+"'!A1");
                     assertThat(spec.getRow(r).getCell(6).getStringCellValue()).isEqualTo("B"); assertThat(spec.getRow(r).getCell(8).getStringCellValue()).isEqualTo(r==3?"ID":"ID,CUSTOMER_ID");
+                    assertThat(spec.getRow(r).getCell(36).getStringCellValue()).isEqualTo("New");
+                    assertThat(spec.getRow(r).getCell(36).getCellStyle().getFillForegroundColor()).isEqualTo(org.apache.poi.ss.usermodel.IndexedColors.LIGHT_GREEN.getIndex());
                 }
                 assertThat(spec.getRow(2).getCell(6).getStringCellValue()).isEqualTo("File Format (F - Fixed Width, P - Pipe Delimited, T - Tab Delimited, PQ - Pipe With Quotes, B - Bell Delimited, || delimited )");
                 for(int c=2;c<36;c++) {

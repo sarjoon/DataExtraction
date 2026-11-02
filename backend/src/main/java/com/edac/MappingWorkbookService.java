@@ -17,6 +17,10 @@ public class MappingWorkbookService {
     public MappingWorkbookService(RegistryService registry,JdbcTemplate db){this.registry=registry;this.db=db;}
     public byte[] generate(long connectionId,List<Long> ids) throws IOException {
         if(ids==null || ids.isEmpty())throw new IllegalArgumentException("Select at least one table.");
+        return generateForBau(connectionId,ids,Set.of(),"FIle Spec");
+    }
+    byte[] generateForBau(long connectionId,List<Long> ids,Set<String> reservedNames,String specName) throws IOException {
+        if(ids==null)throw new IllegalArgumentException("Table selection is required.");
         if(new HashSet<>(ids).size()!=ids.size())throw new IllegalArgumentException("Select each table only once.");
         var profile=registry.connection(connectionId);
         var tables=ids.stream().map(id->registry.table(connectionId,id)).toList();
@@ -33,6 +37,12 @@ public class MappingWorkbookService {
         }
         try(var input=new ClassPathResource("templates/EDAC_Mapping_Template.xlsx").getInputStream();var wb=new XSSFWorkbook(input);var output=new ByteArrayOutputStream()) {
             var spec=wb.getSheet("FIle Spec");var prototype=wb.getSheetAt(1);
+            wb.setSheetName(0,specName);
+            spec.getRow(2).createCell(36).setCellValue("Comment");
+            spec.getRow(2).getCell(36).setCellStyle(spec.getRow(2).getCell(1).getCellStyle());
+            spec.setColumnWidth(36,16*256);
+            var newStyle=wb.createCellStyle();newStyle.cloneStyleFrom(spec.getRow(3).getCell(2).getCellStyle());
+            newStyle.setFillForegroundColor(IndexedColors.LIGHT_GREEN.getIndex());newStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             spec.getRow(2).getCell(6).setCellValue("File Format (F - Fixed Width, P - Pipe Delimited, T - Tab Delimited, PQ - Pipe With Quotes, B - Bell Delimited, || delimited )");
             int trailer=findTrailer(prototype);var specRow=spec.getRow(3);
             short specHeight=specRow.getHeight();CellStyle[] specStyles=new CellStyle[36];
@@ -46,7 +56,8 @@ public class MappingWorkbookService {
             if(spec.getCTWorksheet().isSetDataValidations())spec.getCTWorksheet().unsetDataValidations();
             // Keep the reference sheets until every row/style has been copied.
             int originalCount=wb.getNumberOfSheets();Set<String> used=new HashSet<>();used.add("file spec");
-            if(!skipped.isEmpty())used.add("generation report");
+            reservedNames.forEach(n->used.add(n.toLowerCase(Locale.ROOT)));
+            String reportName=skipped.isEmpty()?null:uniqueName("Generation Report",used);
             var reserved=new HashSet<String>();
             for(var table:tables){reserved.add(WorkbookUtil.createSafeSheetName(table.name()).toLowerCase(Locale.ROOT));reserved.add(WorkbookUtil.createSafeSheetName(table.schema()+"."+table.name()).toLowerCase(Locale.ROOT));}
             for(int i=1;i<originalCount;i++){String reference="__template_"+i;while(reserved.contains(reference.toLowerCase(Locale.ROOT))||wb.getSheet(reference)!=null)reference+="_";wb.setSheetName(i,reference);}
@@ -72,6 +83,7 @@ public class MappingWorkbookService {
                     validation(sheet,9,trailerRow-1,11,11,new String[]{"Y","N"});
                 }
                 sheet.setSelected(false);
+                sheet.setTabColor(new XSSFColor(new byte[]{0x00,(byte)0x80,0x00},null));
                 var row=spec.createRow(3+serial);row.setHeight(specHeight);
                 for(int c=0;c<36;c++)row.createCell(c).setCellStyle(specStyles[c]);
                 for(int c=0;c<36;c++)put(row.getCell(c),defaults[c]);
@@ -81,6 +93,7 @@ public class MappingWorkbookService {
                 put(row.getCell(8),rows.stream().filter(f->f.key()!=null && Arrays.stream(f.key().split(",")).anyMatch(k->"PK".equalsIgnoreCase(k.trim())))
                     .map(f->f.column().name()).collect(java.util.stream.Collectors.joining(",")));
                 put(row.getCell(0),++serial);put(row.getCell(1),label);
+                var comment=row.createCell(36);comment.setCellValue("New");comment.setCellStyle(newStyle);
                 var link=wb.getCreationHelper().createHyperlink(org.apache.poi.common.usermodel.HyperlinkType.DOCUMENT);
                 link.setAddress("'"+name.replace("'","''")+"'!A1");row.getCell(1).setHyperlink(link);
             }
@@ -93,7 +106,7 @@ public class MappingWorkbookService {
             }
             for(int i=originalCount-1;i>=1;i--)wb.removeSheetAt(i);
             if(!skipped.isEmpty()) {
-                var report=wb.createSheet("Generation Report");
+                var report=wb.createSheet(reportName);
                 var summary=report.createRow(1);summary.createCell(0).setCellValue("Selected: "+tables.size()+" | Generated: "+serial+" | Skipped: "+skipped.size());
                 report.addMergedRegion(new CellRangeAddress(1,1,0,3));
                 String[] headers={"Schema","Table Name","Status","Reason"};var heading=report.createRow(2);
@@ -108,7 +121,7 @@ public class MappingWorkbookService {
                 report.createFreezePane(0,3);
             }
             for(var sheet:wb)navigation(wb,(XSSFSheet)sheet,0,"Go to File Spec",spec.getSheetName());
-            if(wb.getSheet("Generation Report")!=null)navigation(wb,spec,3,"Generation Report","Generation Report");
+            if(reportName!=null)navigation(wb,spec,3,"Generation Report",reportName);
             wb.setActiveSheet(0);spec.setSelected(true);
             wb.getCreationHelper().createFormulaEvaluator().evaluateAll();
             wb.write(output);return output.toByteArray();

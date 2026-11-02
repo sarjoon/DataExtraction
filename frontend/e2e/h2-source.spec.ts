@@ -37,6 +37,7 @@ test('H2 source works through connection, discovery and persistent column select
   await page.getByLabel('Select all tables',{exact:true}).check();
   const downloadPromise=page.waitForEvent('download');
   const exportRequest=page.waitForRequest(r=>r.url().endsWith('/mapping-workbook')&&r.method()==='POST');
+  await page.getByLabel('Is a BAU mapping workbook available?',{exact:true}).selectOption('no');
   await page.getByRole('button',{name:'Generate mapping workbook',exact:true}).click();
   expect((await exportRequest).postDataJSON().tableIds).toHaveLength(2);
   const download=await downloadPromise;expect(download.suggestedFilename()).toBe('Extraction_Framework_Mapping.xlsx');

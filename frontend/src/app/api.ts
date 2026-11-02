@@ -28,7 +28,8 @@ export class Api {
     await this.get('/csrf');
     return firstValueFrom(this.http.post<T>('/api'+path,body));
   }
-  async downloadWorkbook(connectionId:number,tableIds:number[]){
+  async downloadWorkbook(connectionId:number,tableIds:number[],bauFile?:File){
+    if(bauFile){const form=new FormData();form.append('bauFile',bauFile);tableIds.forEach(id=>form.append('tableIds',String(id)));return this.download(`/connections/${connectionId}/mapping-workbook`,form);}
     return this.download(`/connections/${connectionId}/mapping-workbook`,{tableIds});
   }
   async downloadTriggers(connectionId:number,screenIds:number[]){
