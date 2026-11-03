@@ -30,8 +30,8 @@ public class BauMappingWorkbookService {
             throw new IllegalArgumentException("Provide a valid table selection without duplicates.");
         // Check ownership even for selected entries that BAU will supersede.
         for(long id:ids)registry.table(connectionId,id);
-        if(file==null || file.isEmpty() || file.getSize()>5*1024*1024)
-            throw new IllegalArgumentException("Upload a BAU .xlsx workbook no larger than 5 MB.");
+        if(file==null || file.isEmpty())
+            throw new IllegalArgumentException("Upload a BAU .xlsx workbook.");
         try(var input=file.getInputStream();var bau=new XSSFWorkbook(input)) {
             if(bau.isMacroEnabled())throw new IllegalArgumentException("Upload an .xlsx workbook without macros.");
             var layout=readLayout(bau);

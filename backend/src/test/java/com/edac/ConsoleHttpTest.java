@@ -13,6 +13,37 @@ import java.util.Map;
 @ActiveProfiles("local")
 class ConsoleHttpTest {
     @Autowired TestRestTemplate http;
+    @Autowired RegistryService registry;
+    @Test void acceptsBauWorkbookLargerThanOldFileAndRequestLimitsOverHttp() throws Exception {
+        byte[] workbook;
+        try(var book=new org.apache.poi.xssf.usermodel.XSSFWorkbook();var output=new java.io.ByteArrayOutputStream()) {
+            var spec=book.createSheet("File Spec");spec.createRow(0).createCell(0).setCellValue("File Name");spec.createRow(1).createCell(0).setCellValue("LEGACY_TABLE");
+            book.createSheet("LEGACY_TABLE").createRow(0).createCell(0).setCellValue("Original BAU definition");
+            book.write(output);workbook=output.toByteArray();
+        }
+        // Incompressible package data makes the real uploaded XLSX larger than 6 MB.
+        try(var input=new java.io.ByteArrayInputStream(workbook);var pkg=org.apache.poi.openxml4j.opc.OPCPackage.open(input);var output=new java.io.ByteArrayOutputStream()) {
+            var part=pkg.createPart(org.apache.poi.openxml4j.opc.PackagingURIHelper.createPartName("/bau-test-data.bin"),"application/octet-stream");
+            byte[] padding=new byte[6*1024*1024];new java.util.Random(42).nextBytes(padding);
+            try(var stream=part.getOutputStream()){stream.write(padding);}
+            pkg.save(output);workbook=output.toByteArray();
+        }
+        assertThat(workbook.length).isGreaterThan(6*1024*1024);
+        String name="large_bau_"+java.util.UUID.randomUUID().toString().replace("-","");
+        var profile=registry.save(new Models.ConnectionInput(name,"H2",null,null,"MEMORY",name,"sa","PUBLIC",""));
+        registry.append(profile.id(),java.util.List.of("LEGACY_TABLE"),"MANUAL");
+        var csrf=http.getForEntity("/api/csrf",Map.class);var headers=new HttpHeaders();headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        headers.set("Cookie",csrf.getHeaders().getFirst("Set-Cookie").split(";")[0]);headers.set("X-XSRF-TOKEN",csrf.getBody().get("token").toString());
+        var body=new org.springframework.util.LinkedMultiValueMap<String,Object>();
+        body.add("bauFile",new org.springframework.core.io.ByteArrayResource(workbook){@Override public String getFilename(){return "bau.xlsx";}});
+        var response=http.exchange("/api/connections/"+profile.id()+"/mapping-workbook",HttpMethod.POST,new HttpEntity<>(body,headers),byte[].class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        try(var result=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(response.getBody()))) {
+            assertThat(result.getSheet("LEGACY_TABLE").getRow(0).getCell(0).getStringCellValue()).isEqualTo("Original BAU definition");
+            assertThat(result.getSheetAt(0).getRow(3).getCell(36).getStringCellValue()).isEqualTo("BAU");
+        }
+        assertThat(registry.tables(profile.id())).isEmpty();
+    }
     @Test void servesBundledFrontendAndDirectAngularRoutes() {
         for (String path : new String[]{"/", "/index.html", "/overview", "/connections", "/tables", "/mapping", "/generation", "/triggers"}) {
             var response = http.getForEntity(path, String.class);
@@ -25,7 +56,7 @@ class ConsoleHttpTest {
         var bundle=http.getForEntity("/" + scripts.group(1), String.class);
         assertThat(bundle.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(bundle.getBody()).as("Packaged UI includes the BAU mapping upload")
-            .contains("Is a BAU mapping workbook available?","bau-workbook","BAU mapping workbook (.xlsx, up to 5 MB)");
+            .contains("Is a BAU mapping workbook available?","bau-workbook","BAU mapping workbook (.xlsx)");
         assertThat(http.getForEntity("/sample-screens.csv",String.class).getBody()).contains("Screen Name");
     }
     @Test void realCookieProtectsWritesAndConsoleAllowsSameOriginFrames() {

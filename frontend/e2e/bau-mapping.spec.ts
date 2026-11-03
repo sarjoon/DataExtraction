@@ -37,7 +37,7 @@ test('BAU upload validates files, preserves selection after failure and refreshe
  await page.goto('/mapping');await page.getByLabel('Select all tables',{exact:true}).check();
  await page.getByLabel('Is a BAU mapping workbook available?',{exact:true}).selectOption('yes');
  await expect(page.getByText(/permanently removed from this connection after successful generation/)).toBeVisible();
- const upload=page.getByLabel('BAU mapping workbook (.xlsx, up to 5 MB)',{exact:true});
+ const upload=page.getByLabel('BAU mapping workbook (.xlsx)',{exact:true});
  await upload.setInputFiles({name:'invalid.txt',mimeType:'text/plain',buffer:Buffer.from('invalid')});
  await expect(page.getByRole('alert')).toContainText('Upload a BAU .xlsx workbook');
  const generate=page.getByRole('button',{name:'Generate mapping workbook',exact:true});await expect(generate).toBeDisabled();
@@ -50,7 +50,7 @@ test('BAU upload validates files, preserves selection after failure and refreshe
  await expect(page.getByRole('status').filter({hasText:'Mapping workbook downloaded.'})).toContainText('Matching BAU registrations were permanently removed');expect(refreshed).toBe(2);
 });
 
-test('a BAU workbook can be generated without selecting new tables',async({page})=>{
+test('a BAU file larger than 5 MB can be submitted without selecting new tables',async({page})=>{
  let multipart='';
  await page.route('**/api/**',async route=>{
   const path=new URL(route.request().url()).pathname;let body:any={};
@@ -61,7 +61,8 @@ test('a BAU workbook can be generated without selecting new tables',async({page}
   await route.fulfill({json:body});
  });
  await page.goto('/mapping');await page.getByLabel('Is a BAU mapping workbook available?',{exact:true}).selectOption('yes');
- await page.getByLabel('BAU mapping workbook (.xlsx, up to 5 MB)',{exact:true}).setInputFiles({name:'bau.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.from('fixture')});
+ await page.getByLabel('BAU mapping workbook (.xlsx)',{exact:true}).setInputFiles({name:'bau.xlsx',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',buffer:Buffer.alloc(6*1024*1024,65)});
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'Generate mapping workbook',exact:true}).click();await download;
  expect(multipart).toContain('name="bauFile"');expect(multipart).not.toContain('name="tableIds"');
+ expect(Buffer.byteLength(multipart)).toBeGreaterThan(6*1024*1024);
 });

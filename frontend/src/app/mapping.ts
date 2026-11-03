@@ -14,7 +14,7 @@ interface Column {position:number;name:string;dataType:string;byteLength:number|
 <option value="" disabled>Select an option</option><option value="no">No, generate new mappings only</option><option value="yes">Yes, include a BAU workbook</option>
 </select>
 @if(bauChoice()==='yes'){
-<label for="bau-workbook">BAU mapping workbook (.xlsx, up to 5 MB)</label>
+<label for="bau-workbook">BAU mapping workbook (.xlsx)</label>
 <input id="bau-workbook" type="file" accept=".xlsx" (change)="selectBauFile($event)" [disabled]="exporting()">
 <p class="note">BAU tables appear first and keep their existing worksheets. Matching table registrations and their saved column exclusions will be permanently removed from this connection after successful generation. Change History and System Specification tabs are excluded.</p>
 }
@@ -73,7 +73,7 @@ export class MappingComponent implements OnDestroy {
  chooseBau(value:string){this.bauChoice.set(value);this.bauFile.set(undefined);this.exportError.set('');}
  selectBauFile(event:Event){
    const input=event.target as HTMLInputElement;const file=input.files?.[0];this.bauFile.set(undefined);this.exportError.set('');
-   if(file && (!file.name.toLowerCase().endsWith('.xlsx') || file.size>5*1024*1024)){this.exportError.set('Upload a BAU .xlsx workbook no larger than 5 MB.');input.value='';return;}
+   if(file && !file.name.toLowerCase().endsWith('.xlsx')){this.exportError.set('Upload a BAU .xlsx workbook.');input.value='';return;}
    this.bauFile.set(file);
  }
  ngOnDestroy(){this.destroyed=true;this.version++;}
