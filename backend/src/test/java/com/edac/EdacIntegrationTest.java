@@ -386,26 +386,26 @@ class EdacIntegrationTest {
                 }
                 assertThat(spec.getDataValidations().get(0).getRegions().getCellRangeAddresses()[0].formatAsString()).isEqualTo("O4:AJ5");
                 var customerSheet=wb.getSheet("CUSTOMER");var accountSheet=wb.getSheet("ACCOUNT");
-                assertThat(customerSheet.getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");
-                assertThat(customerSheet.getRow(9).getCell(3).getNumericCellValue()).isEqualTo(19);
-                assertThat(customerSheet.getRow(9).getCell(5).getStringCellValue()).isEqualTo("PK");
-                assertThat(customerSheet.getRow(10).getCell(1).getStringCellValue()).isEqualTo("BALANCE");
-                assertThat(customerSheet.getRow(10).getCell(3).getNumericCellValue()).isEqualTo(15);
-                assertThat(customerSheet.getRow(10).getCell(4).getNumericCellValue()).isEqualTo(2);
-                assertThat(customerSheet.getRow(10).getCell(9).getStringCellValue()).isEqualTo("0");
-                assertThat(customerSheet.getRow(11).getCell(3).getNumericCellValue()).isEqualTo(10);
-                assertThat(customerSheet.getRow(12).getCell(3).getNumericCellValue()).isEqualTo(19);
-                assertThat(customerSheet.getRow(11).getCell(8).getStringCellValue()).isEqualTo("YYYY-MM-DD");
-                assertThat(customerSheet.getRow(12).getCell(8).getStringCellValue()).isEqualTo("YYYY-MM-DD HH:MI:SS");
+                assertThat(customerSheet.getRow(10).getCell(1).getStringCellValue()).isEqualTo("ID");
+                assertThat(customerSheet.getRow(10).getCell(3).getNumericCellValue()).isEqualTo(19);
+                assertThat(customerSheet.getRow(10).getCell(5).getStringCellValue()).isEqualTo("PK");
+                assertThat(customerSheet.getRow(11).getCell(1).getStringCellValue()).isEqualTo("BALANCE");
+                assertThat(customerSheet.getRow(11).getCell(3).getNumericCellValue()).isEqualTo(15);
+                assertThat(customerSheet.getRow(11).getCell(4).getNumericCellValue()).isEqualTo(2);
+                assertThat(customerSheet.getRow(11).getCell(9).getStringCellValue()).isEqualTo("0");
+                assertThat(customerSheet.getRow(12).getCell(3).getNumericCellValue()).isEqualTo(10);
+                assertThat(customerSheet.getRow(13).getCell(3).getNumericCellValue()).isEqualTo(19);
+                assertThat(customerSheet.getRow(12).getCell(8).getStringCellValue()).isEqualTo("YYYY-MM-DD");
+                assertThat(customerSheet.getRow(13).getCell(8).getStringCellValue()).isEqualTo("YYYY-MM-DD HH:MI:SS");
                 for(var sheet:wb) {
                     assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Go to File Spec");
                     assertThat(sheet.getRow(0).getCell(0).getHyperlink().getAddress()).isEqualTo("'FIle Spec'!A1");
                 }
-                assertThat(customerSheet.getRow(13).getCell(0).getStringCellValue()).isEqualTo("Trailer");
-                assertThat(accountSheet.getRow(10).getCell(5).getStringCellValue()).isEqualTo("PK,FK");
+                assertThat(customerSheet.getRow(14).getCell(0).getStringCellValue()).isEqualTo("Trailer");
+                assertThat(accountSheet.getRow(11).getCell(5).getStringCellValue()).isEqualTo("PK,FK");
                 var formatter=new org.apache.poi.ss.usermodel.DataFormatter();
                 for(int r=0;r<7;r++)for(int c=0;c<11;c++)assertThat(formatter.formatCellValue(customerSheet.getRow(r).getCell(c))).isEqualTo(formatter.formatCellValue(accountSheet.getRow(r).getCell(c)));
-                for(int r=0;r<5;r++)for(int c=0;c<11;c++)assertThat(formatter.formatCellValue(customerSheet.getRow(13+r).getCell(c))).isEqualTo(formatter.formatCellValue(accountSheet.getRow(11+r).getCell(c)));
+                for(int r=0;r<5;r++)for(int c=0;c<11;c++)assertThat(formatter.formatCellValue(customerSheet.getRow(14+r).getCell(c))).isEqualTo(formatter.formatCellValue(accountSheet.getRow(12+r).getCell(c)));
                 assertThat(customerSheet.getRow(5).getCell(3).getNumericCellValue()).isEqualTo(8);
                 assertThat(customerSheet.getRow(6).getCell(3).getNumericCellValue()).isEqualTo(14);
                 assertThat(customerSheet.getColumnWidth(10)).isEqualTo(template.getSheetAt(1).getColumnWidth(10));
@@ -416,7 +416,7 @@ class EdacIntegrationTest {
             java.nio.file.Files.write(java.nio.file.Path.of("../outputs/workbook-verification/EDAC_Mapping_Workbook.xlsx"),bytes);
             for(var column:List.of("ID","BALANCE","BUSINESS_DATE","UPDATED_AT"))db.update("INSERT INTO column_exclusion(table_id,column_name) VALUES(?,?)",customer,column);
             try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbooks.generate(profile.id(),List.of(customer))))) {
-                assertThat(wb.getNumberOfSheets()).isEqualTo(2);assertThat(wb.getSheetAt(1).getRow(9).getCell(0).getStringCellValue()).isEqualTo("Trailer");
+                assertThat(wb.getNumberOfSheets()).isEqualTo(2);assertThat(wb.getSheetAt(1).getRow(10).getCell(0).getStringCellValue()).isEqualTo("Trailer");
             }
             sql.execute("SHUTDOWN");
         }
@@ -433,7 +433,7 @@ class EdacIntegrationTest {
             try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbooks.generate(profile.id(),List.of(missing,present))))) {
                 assertThat(wb.getNumberOfSheets()).isEqualTo(3);
                 assertThat(wb.getSheet("MISSING_TABLE")).isNull();
-                assertThat(wb.getSheet("PRESENT_TABLE").getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");
+                assertThat(wb.getSheet("PRESENT_TABLE").getRow(10).getCell(1).getStringCellValue()).isEqualTo("ID");
                 var fileName=wb.getSheetAt(0).getRow(3).getCell(1); // Column B owns the table link.
                 assertThat(fileName.getStringCellValue()).isEqualTo("PRESENT_TABLE");
                 assertThat(fileName.getHyperlink()).as("File Name hyperlink in column B").isNotNull();
@@ -469,16 +469,16 @@ class EdacIntegrationTest {
             new Models.MappingField(column,null,null,null)));
         try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(workbooks.generate(id,List.of(table))))) {
             var sheet=wb.getSheet("CUSTOMER");
-            assertThat(sheet.getRow(9).getCell(12).getStringCellValue()).isEqualTo("CUSTOM_NUMBER");
-            assertThat(sheet.getRow(9).getCell(13).getNumericCellValue()).isEqualTo(28);
-            assertThat(sheet.getRow(9).getCell(14).getNumericCellValue()).isEqualTo(7);
-            assertThat(sheet.getRow(10).getCell(14).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
-            assertThat(sheet.getRow(9).getCell(2).getStringCellValue()).isEqualTo("N");
-            assertThat(sheet.getRow(9).getCell(3).getNumericCellValue()).isEqualTo(10);
-            assertThat(sheet.getRow(10).getCell(12).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
-            assertThat(sheet.getRow(10).getCell(13).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
-            assertThat(sheet.getRow(11).getCell(12).getStringCellValue()).isEqualTo("NUMBER");
-            assertThat(sheet.getRow(11).getCell(13).getNumericCellValue()).isEqualTo(10);
+            assertThat(sheet.getRow(10).getCell(12).getStringCellValue()).isEqualTo("CUSTOM_NUMBER");
+            assertThat(sheet.getRow(10).getCell(13).getNumericCellValue()).isEqualTo(28);
+            assertThat(sheet.getRow(10).getCell(14).getNumericCellValue()).isEqualTo(7);
+            assertThat(sheet.getRow(11).getCell(14).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+            assertThat(sheet.getRow(10).getCell(2).getStringCellValue()).isEqualTo("N");
+            assertThat(sheet.getRow(10).getCell(3).getNumericCellValue()).isEqualTo(10);
+            assertThat(sheet.getRow(11).getCell(12).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+            assertThat(sheet.getRow(11).getCell(13).getCellType()).isEqualTo(org.apache.poi.ss.usermodel.CellType.BLANK);
+            assertThat(sheet.getRow(12).getCell(12).getStringCellValue()).isEqualTo("NUMBER");
+            assertThat(sheet.getRow(12).getCell(13).getNumericCellValue()).isEqualTo(10);
         }
     }
     @Test void workbookDownloadValidatesSelectionAndSupportsOraclePlaceholder() throws Exception {
@@ -487,7 +487,7 @@ class EdacIntegrationTest {
         String path="/api/connections/"+id+"/mapping-workbook";String body=json.writeValueAsString(new Models.WorkbookRequest(List.of(table)));
         var response=mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isOk()).andExpect(header().string("Content-Disposition","attachment; filename=Extraction_Framework_Mapping.xlsx")).andReturn();
-        try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(response.getResponse().getContentAsByteArray()))) {assertThat(wb.getSheet("CUSTOMER").getRow(9).getCell(1).getStringCellValue()).isEqualTo("ID");}
+        try(var wb=new XSSFWorkbook(new java.io.ByteArrayInputStream(response.getResponse().getContentAsByteArray()))) {assertThat(wb.getSheet("CUSTOMER").getRow(10).getCell(1).getStringCellValue()).isEqualTo("ID");}
         mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
         mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"tableIds\":[]}")).andExpect(status().isBadRequest());
         mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new Models.WorkbookRequest(List.of(table,table))))).andExpect(status().isBadRequest());

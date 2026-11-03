@@ -70,18 +70,33 @@ public class MappingWorkbookService {
                 wb.setSheetName(wb.getSheetIndex(sheet),name);
                 for(int r=sheet.getLastRowNum();r>=9;r--)if(sheet.getRow(r)!=null)sheet.removeRow(sheet.getRow(r));
                 if(sheet.getCTWorksheet().isSetDataValidations())sheet.getCTWorksheet().unsetDataValidations();
-                var rows=fields.get(table.id());int index=0;
+                var rows=fields.get(table.id());int index=1;String firstNumeric=null;
+                var descriptions=new ArrayList<String>();var descriptionCounts=new HashMap<String,Integer>();
+                descriptionCounts.put("record type",1);
+                for(var field:rows) {
+                    String description=cleanDescription(field.description());descriptions.add(description);
+                    if(!description.isBlank())descriptionCounts.merge(description.toLowerCase(Locale.ROOT),1,Integer::sum);
+                }
+                var record=copyRow(prototype.getRow(9),sheet,9,15,false);
+                Object[] recordValues={1,"Record Type","A",1,null,null,"M","Record Type",null,"D",null,"N",null,null,null};
+                for(int c=0;c<recordValues.length;c++)put(record.getCell(c),recordValues[c]);
                 for(var field:rows) {
                     var row=copyRow(prototype.getRow(9),sheet,9+index,15,false);
+                    String description=descriptions.get(index-1);
+                    if(!description.isBlank() && descriptionCounts.get(description.toLowerCase(Locale.ROOT))>1)
+                        description=cleanDescription(description+" "+field.column().name());
                     Object[] values=detail(field,++index,profile.databaseType(),prototype);
+                    values[7]=description;
+                    if(firstNumeric==null && "N".equals(values[2]))firstNumeric=field.column().name();
                     for(int c=0;c<values.length;c++)put(row.getCell(c),values[c]);
                 }
-                int trailerRow=9+rows.size();
+                int trailerRow=10+rows.size();
                 for(int i=0;i<5;i++)copyRow(prototype.getRow(trailer+i),sheet,trailerRow+i,11,true);
-                if(!rows.isEmpty()) {
-                    validation(sheet,9,trailerRow-1,6,6,new String[]{"M","O"});
-                    validation(sheet,9,trailerRow-1,11,11,new String[]{"Y","N"});
-                }
+                put(sheet.getRow(trailerRow+4).getCell(7),firstNumeric==null?null:"Sum of "+firstNumeric);
+                for(int r=2;r<=6;r++)put(sheet.getRow(r).getCell(7),cleanDescription(sheet.getRow(r).getCell(7).getStringCellValue()));
+                for(int r=trailerRow+2;r<=trailerRow+4;r++)put(sheet.getRow(r).getCell(7),cleanDescription(new DataFormatter().formatCellValue(sheet.getRow(r).getCell(7))));
+                validation(sheet,9,trailerRow-1,6,6,new String[]{"M","O"});
+                validation(sheet,9,trailerRow-1,11,11,new String[]{"Y","N"});
                 sheet.setSelected(false);
                 sheet.setTabColor(new XSSFColor(new byte[]{0x00,(byte)0x80,0x00},null));
                 var row=spec.createRow(3+serial);row.setHeight(specHeight);
@@ -166,9 +181,13 @@ public class MappingWorkbookService {
         else if(source.contains("CHAR") || Set.of("VARCHAR2","NVARCHAR2").contains(source)) {type="A";length=c.characterLength();}
         else if(source.equals("BOOLEAN")){type="A";length=5;}
         else if(sourceLength==null)sourceLength=c.byteLength();
-        return new Object[]{serial,c.name(),type,length,decimal,field.key(),field.mandatory(),field.description(),date,field.defaultValue(),null,null,
+        return new Object[]{serial,c.name(),type,length,decimal,field.key(),field.mandatory(),field.description(),date,field.defaultValue(),null,"N",
             field.sourceMetadata().getOrDefault("SOURCE_DATA_TYPE",c.dataType()),
             field.sourceMetadata().getOrDefault("SOURCE_LENGTH",sourceLength),field.sourceMetadata().getOrDefault("SOURCE_DECIMAL",c.scale())};
+    }
+    private static String cleanDescription(String value) {
+        // Keep underscores in field identifiers while replacing punctuation and symbols.
+        return value==null?"":value.replaceAll("[^\\p{L}\\p{N}_\\s]"," ").replaceAll("\\s+"," ").trim();
     }
     private static int findTrailer(XSSFSheet sheet){for(var row:sheet)if("Trailer".equals(new DataFormatter().formatCellValue(row.getCell(0))))return row.getRowNum();throw new IllegalStateException("Template Trailer section is missing.");}
     private static String uniqueName(String value,Set<String> used) {
