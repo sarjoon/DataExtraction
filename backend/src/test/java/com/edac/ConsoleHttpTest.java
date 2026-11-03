@@ -22,7 +22,10 @@ class ConsoleHttpTest {
         var index = http.getForObject("/index.html", String.class);
         var scripts = java.util.regex.Pattern.compile("src=\"([^\"]+\\.js)\"").matcher(index);
         assertThat(scripts.find()).isTrue();
-        assertThat(http.getForEntity("/" + scripts.group(1), String.class).getStatusCode()).isEqualTo(HttpStatus.OK);
+        var bundle=http.getForEntity("/" + scripts.group(1), String.class);
+        assertThat(bundle.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(bundle.getBody()).as("Packaged UI includes the BAU mapping upload")
+            .contains("Is a BAU mapping workbook available?","bau-workbook","BAU mapping workbook (.xlsx, up to 5 MB)");
         assertThat(http.getForEntity("/sample-screens.csv",String.class).getBody()).contains("Screen Name");
     }
     @Test void realCookieProtectsWritesAndConsoleAllowsSameOriginFrames() {
