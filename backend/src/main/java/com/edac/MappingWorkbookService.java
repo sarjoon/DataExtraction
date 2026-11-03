@@ -38,6 +38,7 @@ public class MappingWorkbookService {
         try(var input=new ClassPathResource("templates/EDAC_Mapping_Template.xlsx").getInputStream();var wb=new XSSFWorkbook(input);var output=new ByteArrayOutputStream()) {
             var spec=wb.getSheet("FIle Spec");var prototype=wb.getSheetAt(1);
             wb.setSheetName(0,specName);
+            spec.getRow(2).getCell(3).setCellValue("Update Freq");
             spec.getRow(2).createCell(36).setCellValue("Comment");
             spec.getRow(2).getCell(36).setCellStyle(spec.getRow(2).getCell(1).getCellStyle());
             spec.setColumnWidth(36,16*256);
@@ -74,7 +75,9 @@ public class MappingWorkbookService {
                 var descriptions=new ArrayList<String>();var descriptionCounts=new HashMap<String,Integer>();
                 descriptionCounts.put("record type",1);
                 for(var field:rows) {
-                    String description=cleanDescription(field.description());descriptions.add(description);
+                    String description=cleanDescription(field.description());
+                    if(description.isBlank() || description.equalsIgnoreCase("NULL"))description=cleanDescription(field.column().name().replace('_',' '));
+                    descriptions.add(description);
                     if(!description.isBlank())descriptionCounts.merge(description.toLowerCase(Locale.ROOT),1,Integer::sum);
                 }
                 var record=copyRow(prototype.getRow(9),sheet,9,15,false);

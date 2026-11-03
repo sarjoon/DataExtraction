@@ -39,9 +39,11 @@ class BauMappingWorkbookTest {
             var spec=book.createSheet("File Spec");var header=spec.createRow(2);
             header.createCell(0).setCellValue("sno");header.createCell(1).setCellValue("File Name");
             header.createCell(2).setCellValue("Brief Description of file");header.createCell(3).setCellValue("File Format");header.createCell(4).setCellValue("Legacy owner");
+            header.createCell(5).setCellValue("Update Freq");
             var row=spec.createRow(3);row.createCell(0).setCellValue(1);var filename=row.createCell(1);filename.setCellValue("old_table");
             var link=book.getCreationHelper().createHyperlink(HyperlinkType.DOCUMENT);link.setAddress("'Legacy Layout'!A1");filename.setHyperlink(link);
             row.createCell(2).setCellValue("Original BAU description");row.createCell(3).setCellValue("F");row.createCell(4).setCellValue("Operations");
+            row.createCell(5).setCellValue("Weekly");
             row=spec.createRow(4);row.createCell(0).setCellValue(2);row.createCell(1).setCellValue("BAU_ONLY");
             if(valid) {
                 var legacy=book.createSheet("Legacy Layout");legacy.createRow(0).createCell(0).setCellValue("Keep this title unchanged");
@@ -78,6 +80,7 @@ class BauMappingWorkbookTest {
                 var spec=result.getSheetAt(0);assertThat(spec.getRow(2).getCell(36).getStringCellValue()).isEqualTo("Comment");
                 assertThat(spec.getRow(3).getCell(1).getStringCellValue()).isEqualTo("old_table");assertThat(spec.getRow(3).getCell(1).getHyperlink().getAddress()).isEqualTo("'Legacy Layout'!A1");
                 assertThat(spec.getRow(3).getCell(2).getStringCellValue()).isEqualTo("Original BAU description");assertThat(spec.getRow(3).getCell(6).getStringCellValue()).isEqualTo("F");
+                assertThat(spec.getRow(2).getCell(3).getStringCellValue()).isEqualTo("Update Freq");assertThat(spec.getRow(3).getCell(3).getStringCellValue()).isEqualTo("Weekly");
                 assertThat(spec.getRow(3).getCell(37).getStringCellValue()).isEqualTo("Operations");
                 assertThat(spec.getRow(3).getCell(36).getStringCellValue()).isEqualTo("BAU");assertThat(spec.getRow(4).getCell(36).getStringCellValue()).isEqualTo("BAU");assertThat(spec.getRow(5).getCell(36).getStringCellValue()).isEqualTo("New");
                 assertThat(spec.getRow(5).getCell(1).getStringCellValue()).isEqualTo("NEW_TABLE");assertThat(spec.getRow(5).getCell(0).getNumericCellValue()).isEqualTo(3);

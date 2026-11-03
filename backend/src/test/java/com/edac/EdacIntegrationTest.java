@@ -333,7 +333,7 @@ class EdacIntegrationTest {
                 var spec=wb.getSheetAt(0);var f=new org.apache.poi.ss.usermodel.DataFormatter();
                 assertThat(f.formatCellValue(spec.getRow(2).getCell(4)).toLowerCase(java.util.Locale.ROOT)).startsWith("file type");
                 assertThat(f.formatCellValue(spec.getRow(2).getCell(5)).toLowerCase(java.util.Locale.ROOT)).startsWith("load strategy");
-                assertThat(f.formatCellValue(spec.getRow(2).getCell(3)).toLowerCase(java.util.Locale.ROOT)).startsWith("update frequency");
+                assertThat(f.formatCellValue(spec.getRow(2).getCell(3))).isEqualTo("Update Freq");
                 assertThat(spec.getRow(3).getCell(3).getStringCellValue()).isEqualTo("Daily");
                 assertThat(spec.getRow(4).getCell(3).getStringCellValue()).isEqualTo("Weekly");
                 assertThat(spec.getRow(5).getCell(3).getStringCellValue()).isEqualTo("Weekly");
@@ -380,7 +380,7 @@ class EdacIntegrationTest {
                 }
                 assertThat(spec.getRow(2).getCell(6).getStringCellValue()).isEqualTo("File Format (F - Fixed Width, P - Pipe Delimited, T - Tab Delimited, PQ - Pipe With Quotes, B - Bell Delimited, || delimited )");
                 for(int c=2;c<36;c++) {
-                    if(c==6)continue;
+                    if(c==6 || c==3)continue;
                     assertThat(spec.getColumnWidth(c)).isEqualTo(template.getSheetAt(0).getColumnWidth(c));
                     assertThat(spec.getRow(2).getCell(c).getStringCellValue()).isEqualTo(template.getSheetAt(0).getRow(2).getCell(c).getStringCellValue());
                 }

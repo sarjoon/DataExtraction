@@ -119,6 +119,7 @@ public class BauMappingWorkbookService {
     private static String normalize(String value){return value.trim().toUpperCase(Locale.ROOT);}
     private static String key(String value) {
         String key=value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]","");
+        if(key.equals("updatefreq"))return "updatefrequency";
         for(String prefix:List.of("fileformat","filetype","loadstrategy","updatefrequency"))if(key.startsWith(prefix))return prefix;
         return key;
     }

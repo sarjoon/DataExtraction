@@ -21,7 +21,7 @@ public class TableListReader {
                     case "schema","schemaname"->schemaColumn=c;
                     case "filetype"->fileTypeColumn=c;
                     case "loadstrategy"->strategyColumn=c;
-                    case "updatefrequency"->frequencyColumn=c;
+                    case "updatefrequency","updatefreq"->frequencyColumn=c;
                 }
                 break;
             }

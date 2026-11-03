@@ -14,6 +14,23 @@ class MappingDetailRulesTest {
     private static Models.MappingField field(int position,String name,String type,String description) {
         return new Models.MappingField(new Models.ColumnDetail(position,name,type,20,20,10,0,false,true),"",description,null);
     }
+    @Test void usesFieldNamesForMissingDescriptionsAndShortFrequencyHeader() throws Exception {
+        var registry=mock(RegistryService.class);var db=mock(JdbcTemplate.class);
+        when(registry.connection(1)).thenReturn(new Models.ConnectionProfile(1,"Test","H2","localhost",9092,"MEMORY","test","jdbc:h2:mem:test","sa","PUBLIC",true));
+        when(registry.table(1,1)).thenReturn(new Models.TableEntry(1,1,"PUBLIC","FIELDS","MANUAL",""));
+        when(db.queryForList(anyString(),eq(String.class),eq(1L))).thenReturn(List.of());
+        when(registry.mappingFields(1,1)).thenReturn(List.of(
+            field(1,"CUSTOMER_ID","VARCHAR",null),field(2,"ACCOUNT_NAME","VARCHAR",""),
+            field(3,"BUSINESS_DATE","VARCHAR","   "),field(4,"SOURCE_SYSTEM","VARCHAR"," / & () "),
+            field(5,"STATUS_CODE","VARCHAR","NULL"),field(6,"ORIGINAL_FIELD","VARCHAR","Existing description")));
+        try(var book=new XSSFWorkbook(new ByteArrayInputStream(new MappingWorkbookService(registry,db).generate(1,List.of(1L))))) {
+            assertThat(book.getSheetAt(0).getRow(2).getCell(3).getStringCellValue()).isEqualTo("Update Freq");
+            var sheet=book.getSheet("FIELDS");
+            String[] expected={"CUSTOMER ID","ACCOUNT NAME","BUSINESS DATE","SOURCE SYSTEM","STATUS CODE","Existing description"};
+            for(int i=0;i<expected.length;i++)assertThat(sheet.getRow(10+i).getCell(7).getStringCellValue()).isEqualTo(expected[i]);
+            assertThat(sheet.getRow(10).getCell(1).getStringCellValue()).isEqualTo("CUSTOMER_ID");
+        }
+    }
     @Test void generatesRecordTypePiiCleanDescriptionsAndHashFromFirstIncludedNumericField() throws Exception {
         var registry=mock(RegistryService.class);var db=mock(JdbcTemplate.class);
         when(registry.connection(1)).thenReturn(new Models.ConnectionProfile(1,"Test","H2","localhost",9092,"MEMORY","test","jdbc:h2:mem:test","sa","PUBLIC",true));
