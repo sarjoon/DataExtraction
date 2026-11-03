@@ -41,6 +41,13 @@ class ConsoleHttpTest {
         headers.set("Cookie",csrf.getHeaders().getFirst("Set-Cookie").split(";")[0]);headers.set("X-XSRF-TOKEN",csrf.getBody().get("token").toString());
         var body=new org.springframework.util.LinkedMultiValueMap<String,Object>();
         body.add("bauFile",new org.springframework.core.io.ByteArrayResource(workbook){@Override public String getFilename(){return "bau.xlsx";}});
+        registry.tables(profile.id()).forEach(table->body.add("tableIds",Long.toString(table.id())));
+        var rejected=http.exchange("/api/connections/"+profile.id()+"/mapping-workbook",HttpMethod.POST,new HttpEntity<>(body,headers),Map.class);
+        assertThat(rejected.getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+        assertThat(rejected.getBody()).containsEntry("code","MULTIPART_PART_COUNT").containsEntry("maxFileBytes",-1).containsEntry("maxRequestBytes",-1);
+        assertThat(rejected.getBody().get("rootCause")).isEqualTo("FileCountLimitExceededException");
+        assertThat(registry.tables(profile.id())).hasSize(61);
+        body.remove("tableIds");
         body.add("tableIds",registry.tables(profile.id()).stream().map(table->Long.toString(table.id())).collect(java.util.stream.Collectors.joining(",")));
         var response=http.exchange("/api/connections/"+profile.id()+"/mapping-workbook",HttpMethod.POST,new HttpEntity<>(body,headers),byte[].class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
