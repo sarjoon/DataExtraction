@@ -19,6 +19,10 @@ class ConsoleHttpTest {
         try(var book=new org.apache.poi.xssf.usermodel.XSSFWorkbook();var output=new java.io.ByteArrayOutputStream()) {
             var spec=book.createSheet("File Spec");spec.createRow(0).createCell(0).setCellValue("File Name");spec.createRow(1).createCell(0).setCellValue("LEGACY_TABLE");
             book.createSheet("LEGACY_TABLE").createRow(0).createCell(0).setCellValue("Original BAU definition");
+            for(int i=1;i<=60;i++) {
+                String table="LEGACY_"+i;spec.createRow(i+1).createCell(0).setCellValue(table);
+                book.createSheet(table).createRow(0).createCell(0).setCellValue("BAU definition "+i);
+            }
             book.write(output);workbook=output.toByteArray();
         }
         // Incompressible package data makes the real uploaded XLSX larger than 6 MB.
@@ -32,10 +36,12 @@ class ConsoleHttpTest {
         String name="large_bau_"+java.util.UUID.randomUUID().toString().replace("-","");
         var profile=registry.save(new Models.ConnectionInput(name,"H2",null,null,"MEMORY",name,"sa","PUBLIC",""));
         registry.append(profile.id(),java.util.List.of("LEGACY_TABLE"),"MANUAL");
+        registry.append(profile.id(),java.util.stream.IntStream.rangeClosed(1,60).mapToObj(i->"LEGACY_"+i).toList(),"MANUAL");
         var csrf=http.getForEntity("/api/csrf",Map.class);var headers=new HttpHeaders();headers.setContentType(MediaType.MULTIPART_FORM_DATA);
         headers.set("Cookie",csrf.getHeaders().getFirst("Set-Cookie").split(";")[0]);headers.set("X-XSRF-TOKEN",csrf.getBody().get("token").toString());
         var body=new org.springframework.util.LinkedMultiValueMap<String,Object>();
         body.add("bauFile",new org.springframework.core.io.ByteArrayResource(workbook){@Override public String getFilename(){return "bau.xlsx";}});
+        body.add("tableIds",registry.tables(profile.id()).stream().map(table->Long.toString(table.id())).collect(java.util.stream.Collectors.joining(",")));
         var response=http.exchange("/api/connections/"+profile.id()+"/mapping-workbook",HttpMethod.POST,new HttpEntity<>(body,headers),byte[].class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         try(var result=new org.apache.poi.xssf.usermodel.XSSFWorkbook(new java.io.ByteArrayInputStream(response.getBody()))) {

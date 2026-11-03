@@ -45,6 +45,7 @@ test('BAU upload validates files, preserves selection after failure and refreshe
  await generate.click();await expect(page.getByRole('alert')).toContainText('BAU File Spec must contain a File Name column.');
  await expect(page.getByLabel('Select APP.OLD_TABLE',{exact:true})).toBeChecked();expect(refreshed).toBe(1);
  expect(multipart).toContain('name="bauFile"; filename="bau.xlsx"');expect(multipart).toContain('name="tableIds"');
+ expect(multipart.match(/name="tableIds"/g)).toHaveLength(1);expect(multipart).toContain('11,12');
  fail=false;const download=page.waitForEvent('download');await generate.click();await download;
  await expect(page.getByLabel('Select APP.OLD_TABLE',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('status').filter({hasText:'Mapping workbook downloaded.'})).toContainText('Matching BAU registrations were permanently removed');expect(refreshed).toBe(2);

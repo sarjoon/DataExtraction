@@ -16,7 +16,13 @@ public class ApiErrors {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<?> validation(MethodArgumentNotValidException e){return ResponseEntity.badRequest().body(Map.of("message",e.getBindingResult().getFieldErrors().stream().map(f->f.getField()+": "+f.getDefaultMessage()).reduce((a,b)->a+"; "+b).orElse("Invalid request.")));}
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    ResponseEntity<?> size(){return ResponseEntity.status(413).body(Map.of("message","Upload exceeds the configured server request-size limit."));}
+    ResponseEntity<?> size(MaxUploadSizeExceededException exception){
+        for(Throwable cause=exception;cause!=null;cause=cause.getCause()) {
+            String type=cause.getClass().getSimpleName();
+            if(type.contains("FileCountLimit") || type.contains("PartCount"))return ResponseEntity.status(413).body(Map.of("message","Upload contains too many form fields. Refresh the application to use the updated BAU upload format."));
+        }
+        return ResponseEntity.status(413).body(Map.of("message","Upload exceeds the configured server request-size limit."));
+    }
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<?> missing(ResponseStatusException e){return ResponseEntity.status(e.getStatusCode()).body(Map.of("message",e.getReason()==null?"Request failed.":e.getReason()));}
     @ExceptionHandler({HttpMessageNotReadableException.class,IOException.class})
