@@ -1,146 +1,124 @@
-2026-11-03T17:47:19.451+08:00  WARN 4680 --- [edac] [.1-8085-exec-10] [6ae9ada7e5315b0cd33b86bda286aff1-483de5092e91b722] com.edac.ApiErrors                       : Upload rejected: code=MULTIPART_PART_COUNT, rootCause=org.apache.tomcat.util.http.fileupload.impl.FileCountLimitExceededException, maxFileBytes=-1, maxRequestBytes=-1
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.uob.ufw</groupId>
+        <artifactId>uob-ms-starter</artifactId>
+        <version>3.6.15.2.RELEASE</version>
+    </parent>
+    <groupId>com.edac</groupId>
+    <artifactId>edac-backend</artifactId>
+    <version>0.1.0</version>
+    <properties>
+        <java.version>17</java.version>
+        <edac.artifact.name>${project.artifactId}-${project.version}</edac.artifact.name>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.4.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-csv</artifactId>
+            <version>1.14.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <finalName>${edac.artifact.name}</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.12.1</version>
+                <configuration>
+                    <release>17</release>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
 
-org.springframework.web.multipart.MaxUploadSizeExceededException: Maximum upload size exceeded
-        at org.springframework.web.multipart.support.StandardMultipartHttpServletRequest.handleParseFailure(StandardMultipartHttpServletRequest.java:126) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.multipart.support.StandardMultipartHttpServletRequest.parseRequest(StandardMultipartHttpServletRequest.java:112) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.multipart.support.StandardMultipartHttpServletRequest.<init>(StandardMultipartHttpServletRequest.java:88) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.multipart.support.StandardServletMultipartResolver.resolveMultipart(StandardServletMultipartResolver.java:112) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.servlet.DispatcherServlet.checkMultipart(DispatcherServlet.java:1228) ~[spring-webmvc-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.servlet.DispatcherServlet.doDispatch(DispatcherServlet.java:1061) ~[spring-webmvc-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.servlet.DispatcherServlet.doService(DispatcherServlet.java:979) ~[spring-webmvc-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.servlet.FrameworkServlet.processRequest(FrameworkServlet.java:1014) ~[spring-webmvc-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.servlet.FrameworkServlet.doPost(FrameworkServlet.java:914) ~[spring-webmvc-6.2.19.jar!/:6.2.19]
-        at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:590) ~[tomcat-embed-core-10.1.59.jar!/:6.0]
-        at org.springframework.web.servlet.FrameworkServlet.service(FrameworkServlet.java:885) ~[spring-webmvc-6.2.19.jar!/:6.2.19]
-        at jakarta.servlet.http.HttpServlet.service(HttpServlet.java:658) ~[tomcat-embed-core-10.1.59.jar!/:6.0]
-        at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:197) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:142) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.tomcat.websocket.server.WsFilter.doFilter(WsFilter.java:57) ~[tomcat-embed-websocket-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:166) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:142) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:108) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.web.FilterChainProxy.lambda$doFilterInternal$3(FilterChainProxy.java:231) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$FilterObservation$SimpleFilterObservation.lambda$wrap$1(ObservationFilterChainDecorator.java:490) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$AroundFilterObservation$SimpleAroundFilterObservation.lambda$wrap$1(ObservationFilterChainDecorator.java:351) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator.lambda$wrapSecured$0(ObservationFilterChainDecorator.java:83) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:129) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.access.intercept.AuthorizationFilter.doFilter(AuthorizationFilter.java:101) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:125) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.access.ExceptionTranslationFilter.doFilter(ExceptionTranslationFilter.java:119) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.authentication.AnonymousAuthenticationFilter.doFilter(AnonymousAuthenticationFilter.java:100) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter.doFilter(SecurityContextHolderAwareRequestFilter.java:179) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.savedrequest.RequestCacheAwareFilter.doFilter(RequestCacheAwareFilter.java:63) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:107) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.authentication.logout.LogoutFilter.doFilter(LogoutFilter.java:93) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.csrf.CsrfFilter.doFilterInternal(CsrfFilter.java:134) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.CorsFilter.doFilterInternal(CorsFilter.java:91) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.header.HeaderWriterFilter.doHeadersAfter(HeaderWriterFilter.java:90) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.header.HeaderWriterFilter.doFilterInternal(HeaderWriterFilter.java:75) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:82) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.context.SecurityContextHolderFilter.doFilter(SecurityContextHolderFilter.java:69) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter.doFilterInternal(WebAsyncManagerIntegrationFilter.java:62) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:228) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.session.DisableEncodeUrlFilter.doFilterInternal(DisableEncodeUrlFilter.java:42) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.wrapFilter(ObservationFilterChainDecorator.java:241) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$AroundFilterObservation$SimpleAroundFilterObservation.lambda$wrap$0(ObservationFilterChainDecorator.java:334) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$ObservationFilter.doFilter(ObservationFilterChainDecorator.java:225) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.ObservationFilterChainDecorator$VirtualFilterChain.doFilter(ObservationFilterChainDecorator.java:138) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.FilterChainProxy.doFilterInternal(FilterChainProxy.java:233) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.security.web.FilterChainProxy.doFilter(FilterChainProxy.java:191) ~[spring-security-web-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.ServletRequestPathFilter.doFilter(ServletRequestPathFilter.java:52) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.config.annotation.web.configuration.WebSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebSecurityConfiguration.java:319) ~[spring-security-config-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.servlet.handler.HandlerMappingIntrospector.lambda$createCacheFilter$4(HandlerMappingIntrospector.java:267) ~[spring-webmvc-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.CompositeFilter$VirtualFilterChain.doFilter(CompositeFilter.java:113) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.CompositeFilter.doFilter(CompositeFilter.java:74) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.security.config.annotation.web.configuration.WebMvcSecurityConfiguration$CompositeFilterChainProxy.doFilter(WebMvcSecurityConfiguration.java:240) ~[spring-security-config-6.5.11.jar!/:6.5.11]
-        at org.springframework.web.filter.DelegatingFilterProxy.invokeDelegate(DelegatingFilterProxy.java:362) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.DelegatingFilterProxy.doFilter(DelegatingFilterProxy.java:278) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:166) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:142) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.springframework.web.filter.RequestContextFilter.doFilterInternal(RequestContextFilter.java:100) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:166) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:142) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.springframework.web.filter.FormContentFilter.doFilterInternal(FormContentFilter.java:93) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:166) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:142) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.springframework.web.filter.ServerHttpObservationFilter.doFilterInternal(ServerHttpObservationFilter.java:110) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:166) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:142) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.springframework.web.filter.CharacterEncodingFilter.doFilterInternal(CharacterEncodingFilter.java:201) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.springframework.web.filter.OncePerRequestFilter.doFilter(OncePerRequestFilter.java:116) ~[spring-web-6.2.19.jar!/:6.2.19]
-        at org.apache.catalina.core.ApplicationFilterChain.internalDoFilter(ApplicationFilterChain.java:166) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.ApplicationFilterChain.doFilter(ApplicationFilterChain.java:142) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.StandardWrapperValve.invoke(StandardWrapperValve.java:165) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.StandardContextValve.invoke(StandardContextValve.java:88) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.authenticator.AuthenticatorBase.invoke(AuthenticatorBase.java:535) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.StandardHostValve.invoke(StandardHostValve.java:115) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.valves.ErrorReportValve.invoke(ErrorReportValve.java:86) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.core.StandardEngineValve.invoke(StandardEngineValve.java:71) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.connector.CoyoteAdapter.service(CoyoteAdapter.java:348) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.coyote.http11.Http11Processor.service(Http11Processor.java:410) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.coyote.AbstractProcessorLight.process(AbstractProcessorLight.java:71) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:1307) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:2197) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:74) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:976) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:494) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:80) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
-Caused by: java.lang.IllegalStateException: org.apache.tomcat.util.http.fileupload.impl.FileCountLimitExceededException: attachment
-        at org.apache.catalina.connector.Request.parseParts(Request.java:2814) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.connector.Request.getParts(Request.java:2628) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.connector.RequestFacade.getParts(RequestFacade.java:770) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at jakarta.servlet.http.HttpServletRequestWrapper.getParts(HttpServletRequestWrapper.java:315) ~[tomcat-embed-core-10.1.59.jar!/:6.0]
-        at jakarta.servlet.http.HttpServletRequestWrapper.getParts(HttpServletRequestWrapper.java:315) ~[tomcat-embed-core-10.1.59.jar!/:6.0]
-        at jakarta.servlet.http.HttpServletRequestWrapper.getParts(HttpServletRequestWrapper.java:315) ~[tomcat-embed-core-10.1.59.jar!/:6.0]
-        at org.springframework.web.multipart.support.StandardMultipartHttpServletRequest.parseRequest(StandardMultipartHttpServletRequest.java:95) ~[spring-web-6.2.19.jar!/:6.2.19]
-        ... 128 common frames omitted
-Caused by: org.apache.tomcat.util.http.fileupload.impl.FileCountLimitExceededException: attachment
-        at org.apache.tomcat.util.http.fileupload.FileUploadBase.parseRequest(FileUploadBase.java:459) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        at org.apache.catalina.connector.Request.parseParts(Request.java:2769) ~[tomcat-embed-core-10.1.59.jar!/:10.1.59]
-        ... 134 common frames omitted
+                    <execution>
+
+                        <goals>
+
+                            <goal>repackage</goal>
+
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+                <version>2.43.0</version>
+                <configuration>
+                    <java>
+                        <googleJavaFormat>
+                            <version>1.22.0</version>
+                        </googleJavaFormat>
+                        <removeUnusedImports />
+                        <formatAnnotations />
+                    </java>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>format-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
