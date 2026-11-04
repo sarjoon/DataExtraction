@@ -1,19 +1,19 @@
 # Extraction Framework
 
-Extraction Framework uses Angular and Spring Boot to prepare mapping workbooks and extraction scripts, capture data snapshots and compare database schemas.
+Extraction Framework uses Angular and Spring Boot to prepare mapping workbooks and extraction source projects, capture data snapshots and compare database schemas.
 
 ## Database architecture
 
 - **EDAC’s H2 database stores configuration.** Flyway manages EDAC connection profiles and configured table lists in H2. Inspect these through the H2 console.
-- **Oracle, H2 and Sybase ASE connection profiles are supported.** Sybase is supported by Schema Comparison, connection testing and basic dictionary discovery. Data snapshot capture/comparison remains Oracle/H2; extraction script generation remains Oracle. Connections use encrypted saved credentials.
+- **Oracle, H2 and Sybase ASE connection profiles are supported.** Sybase is supported by Schema Comparison, connection testing and basic dictionary discovery. Data snapshot capture/comparison remains Oracle/H2; extraction project generation remains Oracle. Connections use encrypted saved credentials.
 - Source database tables are never created or migrated by Flyway.
-- Schema Comparison reads database dictionary metadata. Extraction Scripts uses the Oracle mapping metadata and generates delimited or fixed-length extraction packages.
+- Schema Comparison reads database dictionary metadata. Extraction project generates a selectable JDBC Cursor or SQLcl Spring Boot source project from Oracle mapping metadata.
 
 ## Snapshot
 
 Connections have a **Read-only connection** checkbox. Flyway V12 protects all existing profiles by default; newly created profiles also default to read-only. Keep source connections read-only. Explicitly uncheck and save the setting only on intended Snapshot destinations. Read-only connections are allowed for discovery, extraction, source reads and both comparison sides, but Snapshot rejects destination inspection/capture and all create, append/update and truncate/import modes with HTTP 403. The backend checks the setting before mutation and each copy batch, independently of the browser controls. This application setting does not change database account grants or restrict direct SQL tools.
 
-Database connections are global. The **Snapshot** main menu groups **Table Definition**, **Batches**, **Configuration**, **Take snapshot**, **Compare**, and **History**. **EDAC Extraction** contains Table List, Mapping Workbook and Extraction Scripts; **Call Trigger** contains Complete Call Trigger. Flyway V9 adds Snapshot configuration and disk-backed working tables to EDAC's configuration database. It does not modify source tables.
+Database connections are global. The **Snapshot** main menu groups **Table Definition**, **Batches**, **Configuration**, **Take snapshot**, **Compare**, and **History**. **EDAC Extraction** contains Table List, Mapping Workbook and Extraction project; **Call Trigger** contains Complete Call Trigger. Flyway V9 adds Snapshot configuration and disk-backed working tables to EDAC's configuration database. It does not modify source tables.
 
 ### Schema Comparison and external Sybase driver
 
@@ -172,15 +172,15 @@ Oracle query placeholder: backend/src/main/resources/sql/oracle-mapping.sql. Com
 
 Workbook limits: 200 selected tables and 50,000 included columns. A table with every column excluded retains its Header, empty Detail section and Trailer.
 
-Oracle Extraction Scripts
+Extraction source project
 
-Open **EDAC Extraction → Extraction Scripts** (`/generation`) and select an Oracle connection. All tables in its existing EDAC table list are selected by default; select a subset if needed. Choose **Delimited** or **Fixed-Length**, optional H/D/T records, system/country codes, and 1–32 parallel jobs. Delimiters include BEL, space, tab, pipe, comma or a custom character. Table control sums allow an included numeric control-sum column. Fixed lengths come from the same mapping metadata and cannot be edited: TIMESTAMP 19, DATE 10, CLOB/NCLOB/BLOB 3000, other fields mapping/dictionary lengths. Mapping workbook column exclusions are respected. Settings are embedded in the generated package; the screen does not execute scripts or save a separate extraction configuration in H2.
+Open **EDAC Extraction / Extraction project** (`/generation`). Select Oracle tables and either **JDBC Cursor** or **SQLcl**. The ZIP contains a Spring Boot Maven source project with only the selected method. Its parent is `com.uob.ufw:uob-ms-starter:3.6.15.2.RELEASE`, and its coordinates are `com.edac:extraction:1.0.0`. Configure your internal Maven repository, then build with JDK 17 or 21 using `mvn clean package`.
 
-Download the ZIP, configure its `extraction.config` on the server, set `BUSINESS_DATE=YYYYMMDD`, and run `bash run.sh`. Requirements are Bash 4+, Oracle SQLcl and Python 3.8+ (standard library only). The ZIP contains a main controller, entity worker, one explicit-column SQL query per table, JSON metadata, formatter and operating instructions. Saved passwords are never exported; configure a wallet alias or credentials securely on the execution server. Extraction does not need write privileges on the source. No Sybase SQL/view translation or automatic UD/security joins are performed; register prepared Oracle extraction views in Table list as needed.
+The external scheduler runs `java -jar target/extraction.jar --extraction.business-date=20261104 --extraction.group=Daily --extraction.request-id=daily-20261104`. There is no internal scheduler. Configure credentials at runtime. JDBC uses a forward-only DataSource cursor with fetch size 2000, progressively writing and flushing every 2000 rows. SQLcl is installed separately; configure `extraction.sqlcl.executable`. It spools CSV to disk, then converts records to the final format. SQLcl is never bundled or downloaded by Maven. See the generated README for staging-space and large-field memory considerations.
 
-Delimited values containing the delimiter or double quotes are quoted, and embedded quotes are doubled. NULL is unquoted `\N`; literal `\N` is quoted. Fixed widths are characters in UTF-8 output, with space-padded text and zero-padded numbers; overflow fails instead of truncating. CR/LF in text become spaces. Oracle dates use YYYY-MM-DD and timestamps use 19 characters without fractional seconds; session time zone is UTC. CLOB and NCLOB are supported without substring conversion; the formatter rejects staging fields exceeding 16,777,216 characters, including the internal marker, without publishing partial output. Fixed-length values must fit their automatic mapping length. BLOB is hexadecimal text using an inline PL/SQL function (Oracle 12c+); LONG, XML and unsupported types still require explicit conversions in an extraction view. Counts and decimal sums are calculated over written rows. The package README documents fixed header/trailer widths, numeric formatting, file naming and delivery behaviour.
+BEL is the default delimiter; pipe, tab, comma, space and custom delimiters are available. Header, Detail and Trailer records are included. Optional control sums use numeric columns. Column exclusions from Mapping Workbook are respected; BAU worksheets are not extraction inputs. Per-table rules support full export, bound range deltas and flag equality. Choose bound columns, operators and sources (business date, run parameters or persisted checkpoint) in the screen. No source DML or cross-table snapshot is used.
 
-Each execution uses a new output directory with per-entity logs, bounded parallel workers and private CSV staging. A failed entity is not published, and any worker failure makes the controller exit nonzero. Successful entities may still be delivered when another fails. Optional `TRANSFER_DIR` publishes completed files individually. No previous output is deleted. SQLcl queries are generated and tested structurally; validate the package against the target Oracle/SQLcl version before production use.
+Parallel jobs, output/delivery directories, filenames, retries and timeouts are configurable. Durable filesystem history records status, count, checksum and delta windows. Reusing a request ID skips successful tables and resumes failures; delivery retries reuse validated output. Extraction failures restart the file. Checkpoints advance after publication and delivery. The generated README documents envelope fields, null/quote rules, exit codes, parameters and cancellation. Target Oracle/SQLcl validation and representative volume benchmarks are required to establish the 3?4 hour runtime target.
 
 ## H2 console and security
 

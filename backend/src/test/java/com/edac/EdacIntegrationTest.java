@@ -493,4 +493,19 @@ class EdacIntegrationTest {
         mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(new Models.WorkbookRequest(List.of(table,table))))).andExpect(status().isBadRequest());
         mvc.perform(post("/api/connections/"+other+"/mapping-workbook").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
     }
+    @Test void extractionProjectApiValidatesSelectionOwnershipAndSecurity() throws Exception {
+        long id=connection(),other=connection();registry.append(id,List.of("CUSTOMER"),"MANUAL");long table=registry.tables(id).get(0).id();
+        when(oracle.mappingFields(any(),anyString(),any())).thenReturn(List.of(new Models.MappingField(new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true),null,null,null)));
+        String path="/api/connections/"+id+"/extraction-project";
+        var request=new ExtractionProjectService.Request(List.of(table),"JDBC"," ",1,"PBI","SG","./output","","{schema}_{table}_{businessDate}.dat",null,java.util.Map.of());
+        String body=json.writeValueAsString(request);
+        mvc.perform(get(path+"/columns/"+table)).andExpect(status().isOk()).andExpect(jsonPath("$[0].numeric").value(true)).andExpect(jsonPath("$[0].deltaType").value("NUMBER"));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isOk()).andExpect(content().contentType("application/zip")).andExpect(header().string("Content-Disposition","attachment; filename=EDAC_Extraction_JDBC_Project.zip"));
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        var invalid=json.readTree(body);((com.fasterxml.jackson.databind.node.ObjectNode)invalid).put("engine","BOTH");
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(invalid))).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/connections/"+other+"/extraction-project").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/connections/"+other+"/extraction-project/columns/"+table)).andExpect(status().isNotFound());
+    }
+
 }
