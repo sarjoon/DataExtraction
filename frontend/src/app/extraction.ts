@@ -28,7 +28,11 @@ interface Settings {tableIds:number[];engine:string;delimiter:string;parallelJob
 <div class="table-scroll"><table><thead><tr><th>Select</th><th>Schema</th><th>Table</th><th>Load strategy</th><th>Update Freq / Scheduler group</th></tr></thead><tbody>@for(t of api.tables();track t.id){<tr><td><input type="checkbox" [attr.aria-label]="'Extract '+t.schema+'.'+t.name" [checked]="selected().has(t.id)" (change)="toggle(t.id,$any($event.target).checked)"></td><td>{{t.schema}}</td><td>{{t.name}}</td><td>{{t.loadStrategy}}</td><td>{{t.updateFrequency}}</td></tr>}</tbody></table></div>
 <p>Mapping workbook column exclusions are respected. The trailer control sum automatically uses the first included Type N field, matching Hash Sum 1. No numeric field means no control sum.</p></section>
 <section class="panel"><h2>Table rules</h2><label>Table options<select [ngModel]="optionTable" (ngModelChange)="loadColumns($event)"><option [ngValue]="null">Choose a table</option>@for(t of deltaTables();track t.id){<option [ngValue]="t.id">{{t.schema}}.{{t.name}}</option>}</select></label>
-@if(optionTable!==null){@let option=options[''+optionTable];<div class="two-column">
+@if(optionTable!==null){
+@if(columnsLoading()){<p role="status">Loading columns from Oracle?</p>}
+@if(columnsError()){<p role="alert">{{columnsError()}}</p><button type="button" (click)="loadColumns(optionTable)" [disabled]="columnsLoading()">Retry columns</button>}
+@if(!columnsLoading()&&!columnsError()&&!columns().length){<p>No included columns were returned by Oracle. Check the table metadata and mapping exclusions.</p>}
+@let option=options[''+optionTable];<div class="two-column">
 <p>Scheduler group: {{tableGroup()}} (from Update Freq).</p>
 <p>Control sum column: {{automaticSum()}} (automatic).</p>
 <label>Extraction rule<select [(ngModel)]="option.delta.mode"><option value="RANGE">Delta range</option><option value="FLAG">Delta flag</option></select></label>
@@ -48,24 +52,30 @@ interface Settings {tableIds:number[];engine:string;delimiter:string;parallelJob
 <section class="panel"><button class="button" (click)="save()" [disabled]="api.busy()||!configReady()||!selected().size||api.selected()?.databaseType!=='ORACLE'">Save configuration</button><p>Saved project settings and delta rules reload when you return. Successful ZIP generation also saves the configuration. Rules for deselected tables are retained.</p><button class="button" (click)="generate()" [disabled]="api.busy()||!configReady()||!selected().size||api.selected()?.databaseType!=='ORACLE'">Generate source project ZIP</button><p role="status">{{message()}}</p></section>
 `})
 export class ExtractionComponent {
- api=inject(Api);selected=signal(new Set<number>());columns=signal<Column[]>([]);message=signal('');optionTable:number|null=null;
+ api=inject(Api);selected=signal(new Set<number>());columns=signal<Column[]>([]);columnsLoading=signal(false);columnsError=signal('');message=signal('');optionTable:number|null=null;
  engine='JDBC';delimiterChoice='BEL';customDelimiter='||';parallelJobs=1;systemCode='PBI';countryCode='SG';outputDirectory='./output';deliveryDirectory='';fileNamePattern='{schema}_{table}_{businessDate}.dat';sqlclExecutable='/opt/sqlcl/bin/sql';
  options:Record<string,TableOption>={};private current:number|null=null;private version=0;private known=new Set<number>();private stored:Settings|null=null;private configVersion=0;configReady=signal(false);
  allSelected=computed(()=>this.api.tables().length>0&&this.selected().size===this.api.tables().length);
  chosenTables=computed(()=>this.api.tables().filter(t=>this.selected().has(t.id)));
  deltaTables=computed(()=>this.chosenTables().filter(t=>t.loadStrategy?.toUpperCase()==='DELTA'));
- automaticSum(){return this.columns().find(c=>c.numeric)?.name??'None';}
+ automaticSum(){return this.columnsLoading()?'Loading':this.columnsError()?'Unavailable until columns load':this.columns().find(c=>c.numeric)?.name??'None';}
  tableGroup(){return this.api.tables().find(t=>t.id===this.optionTable)?.updateFrequency??'';}
  numericDelta(){return this.optionTable!==null&&this.columns().find(c=>c.name===this.options[''+this.optionTable]?.delta.column)?.deltaType==='NUMBER';}
- constructor(){effect(()=>{const connection=this.api.selectedId(),tables=this.api.tables();if(this.current!==connection){this.current=connection;this.known=new Set();this.options={};this.optionTable=null;this.columns.set([]);this.message.set('');this.version++;this.configVersion++;this.stored=null;this.resetSettings();this.configReady.set(false);if(connection!==null&&this.api.selected()?.databaseType==='ORACLE')void this.restore(connection,this.configVersion);}
+ constructor(){effect(()=>{const connection=this.api.selectedId(),tables=this.api.tables();if(this.current!==connection){this.current=connection;this.known=new Set();this.options={};this.optionTable=null;this.columns.set([]);this.message.set('');this.columnsError.set('');this.columnsLoading.set(false);this.version++;this.configVersion++;this.stored=null;this.resetSettings();this.configReady.set(false);if(connection!==null&&this.api.selected()?.databaseType==='ORACLE')void this.restore(connection,this.configVersion);}
  const available=new Set(tables.map(t=>t.id)),selection=new Set([...this.selected()].filter(id=>available.has(id)));for(const t of tables){if(!this.known.has(t.id)&&(!this.stored||this.stored.tableIds.includes(t.id)||!Object.hasOwn(this.stored.tableOptions,String(t.id))))selection.add(t.id);this.options[''+t.id]??={group:t.updateFrequency||'Daily',controlSumColumn:'',delta:{mode:t.loadStrategy?.toUpperCase()==='DELTA'?'RANGE':'FULL',column:'',lowerSource:'BUSINESS_DATE',upperSource:'BUSINESS_DATE_END',initialValue:'',flagValue:'',lowerOperator:'>=',upperOperator:'<'}};if(t.loadStrategy?.toUpperCase()==='DELTA'&&this.options[''+t.id].delta.mode==='FULL')this.options[''+t.id].delta.mode='RANGE';}this.known=available;this.clearOptions();
  if(selection.size!==this.selected().size||[...selection].some(id=>!this.selected().has(id)))this.selected.set(selection);
  });}
  changeConnection(id:number){void this.api.run(()=>this.api.select(id));}
  selectAll(value:boolean){this.selected.set(new Set(value?this.api.tables().map(t=>t.id):[]));this.clearOptions();}
  toggle(id:number,value:boolean){const next=new Set(this.selected());value?next.add(id):next.delete(id);this.selected.set(next);this.clearOptions();}
- clearOptions(){if(this.optionTable!==null&&!this.deltaTables().some(t=>t.id===this.optionTable)){this.optionTable=null;this.columns.set([]);this.version++;}}
- loadColumns(id:number|null){this.optionTable=id;this.columns.set([]);const version=++this.version,connection=this.api.selectedId();if(id===null||connection===null)return;void this.api.run(async()=>{const columns=await this.api.get<Column[]>('/connections/'+connection+'/extraction-project/columns/'+id);if(version===this.version&&connection===this.api.selectedId())this.columns.set(columns);});}
+ clearOptions(){if(this.optionTable!==null&&!this.deltaTables().some(t=>t.id===this.optionTable)){this.optionTable=null;this.columns.set([]);this.columnsError.set('');this.columnsLoading.set(false);this.version++;}}
+ async loadColumns(id:number|null){
+  this.optionTable=id;this.columns.set([]);this.columnsError.set('');this.columnsLoading.set(false);const version=++this.version,connection=this.api.selectedId();if(id===null||connection===null)return;
+  this.columnsLoading.set(true);
+  try{const columns=await this.api.get<Column[]>('/connections/'+connection+'/extraction-project/columns/'+id);if(version===this.version&&connection===this.api.selectedId())this.columns.set(columns);}
+  catch(error){if(version===this.version&&connection===this.api.selectedId()){const problem=error as {error?:{message?:string};message?:string};this.columnsError.set('Cannot load columns from Oracle. '+(problem.error?.message??problem.message??'Check the source database connection.')+' Retry when the source is available.');}}
+  finally{if(version===this.version&&connection===this.api.selectedId())this.columnsLoading.set(false);}
+ }
  chooseColumn(name:string){if(this.optionTable===null)return;const delta=this.options[''+this.optionTable].delta;delta.column=name;if(this.columns().find(c=>c.name===name)?.deltaType==='NUMBER'){delta.lowerSource='PARAMETER';delta.upperSource='PARAMETER';delta.lowerOperator='>';delta.upperOperator='<=';}}
  delimiter(){return ({BEL:'\u0007',SPACE:' ',TAB:'\t',PIPE:'|',COMMA:','} as Record<string,string>)[this.delimiterChoice]??this.customDelimiter;}
  private resetSettings(){this.engine='JDBC';this.delimiterChoice='BEL';this.customDelimiter='||';this.parallelJobs=1;this.systemCode='PBI';this.countryCode='SG';this.outputDirectory='./output';this.deliveryDirectory='';this.fileNamePattern='{schema}_{table}_{businessDate}.dat';this.sqlclExecutable='/opt/sqlcl/bin/sql';}

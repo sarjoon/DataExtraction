@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 test('saves and restores delta-only rules while deriving full-table defaults',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));const requests:any[]=[];let saved:any=null;let slowTables=false;
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));const requests:any[]=[];let saved:any=null;let slowTables=false;let failColumns=true;
  const remember=(input:any)=>{const options={...(saved?.tableOptions??{})};for(const id of input.tableIds)options[id]={delta:input.tableOptions[id]?.delta??null};saved={...input,tableOptions:options};};
  await page.route('**/api/**',async route=>{
   const path=new URL(route.request().url()).pathname;let body:unknown={};
@@ -9,6 +9,7 @@ test('saves and restores delta-only rules while deriving full-table defaults',as
   else if(path==='/api/csrf')body={};
   else if(path.endsWith('/tables')){if(slowTables)await new Promise(resolve=>setTimeout(resolve,150));body=path.includes('/1/')?[{id:10,schema:'APP',name:'CUSTOMERS',loadStrategy:'Full',updateFrequency:'Daily'},{id:11,schema:'APP',name:'ACCOUNTS',loadStrategy:'Delta',updateFrequency:'Weekly'}]:[];}
   else if(path.endsWith('/extraction-project/configuration')){if(route.request().method()==='POST')remember(route.request().postDataJSON());else if(!slowTables)await new Promise(resolve=>setTimeout(resolve,150));body={settings:saved};}
+  else if(path.includes('/extraction-project/columns/')&&failColumns){failColumns=false;await route.fulfill({status:400,json:{message:'Oracle unavailable 12516'}});return;}
   else if(path.includes('/extraction-project/columns/'))body=[{name:'NAME',dataType:'VARCHAR2',numeric:false,deltaType:'TEXT'},{name:'ID',dataType:'NUMBER',numeric:true,deltaType:'NUMBER'},{name:'LAST_UPDATED',dataType:'DATE',numeric:false,deltaType:'DATE'}];
   else if(path.endsWith('/extraction-project')){const input=route.request().postDataJSON();requests.push(input);remember(input);await route.fulfill({contentType:'application/zip',body:'ZIP'});return;}
   else throw new Error('Unexpected request '+path);
@@ -25,6 +26,7 @@ test('saves and restores delta-only rules while deriving full-table defaults',as
  expect(requests[0]).toMatchObject({tableIds:[10],engine:'JDBC',delimiter:'\u0007',tableOptions:{}});
  await page.getByRole('checkbox',{name:'Extract APP.ACCOUNTS',exact:true}).check();
  await table.selectOption({label:'APP.ACCOUNTS'});
+ await expect(page.getByRole('alert').filter({hasText:'12516'})).toBeVisible();await page.getByRole('button',{name:'Retry columns',exact:true}).click();
  await expect(page.getByText('Control sum column: ID (automatic).',{exact:true})).toBeVisible();
  await expect(page.getByRole('combobox',{name:'Extraction rule',exact:true}).locator('option')).toHaveText(['Delta range','Delta flag']);
  await page.getByRole('combobox',{name:'Delta column',exact:true}).selectOption('LAST_UPDATED');

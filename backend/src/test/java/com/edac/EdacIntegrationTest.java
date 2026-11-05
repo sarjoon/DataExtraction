@@ -499,6 +499,7 @@ class EdacIntegrationTest {
         String path="/api/connections/"+id+"/extraction-project";
         var request=new ExtractionProjectService.Request(List.of(table),"JDBC"," ",1,"PBI","SG","./output","","{schema}_{table}_{businessDate}.dat",null,java.util.Map.of());
         String body=json.writeValueAsString(request);
+        when(oracle.columns(any(),anyString(),any())).thenReturn(List.of(new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true)));
         mvc.perform(get(path+"/columns/"+table)).andExpect(status().isOk()).andExpect(jsonPath("$[0].numeric").value(true)).andExpect(jsonPath("$[0].deltaType").value("NUMBER"));
         mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isOk()).andExpect(content().contentType("application/zip")).andExpect(header().string("Content-Disposition","attachment; filename=EDAC_Extraction_JDBC_Project.zip"));
         mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
@@ -532,6 +533,23 @@ class EdacIntegrationTest {
         // Successful generation saves settings too; removed table rules are discarded on reload.
         reopened.generate(id,request);assertThat(reopened.configuration(id).settings().delimiter()).isEqualTo("||");
         db.update("DELETE FROM table_registry WHERE id=?",delta);assertThat(reopened.configuration(id).settings().tableOptions()).doesNotContainKey(Long.toString(delta));
+    }
+
+    @Test void savingExtractionConfigurationNeverCallsOracleEvenWhenSourceIsUnavailable() throws Exception {
+        long id=connection();registry.append(id,List.of("DELTA_OFFLINE"),"MANUAL");long table=registry.tables(id).get(0).id();
+        db.update("UPDATE table_registry SET load_strategy='Delta' WHERE id=?",table);
+        when(oracle.mappingFields(any(),anyString(),any())).thenThrow(new IllegalArgumentException("Oracle unavailable 12516"));
+        when(oracle.columns(any(),anyString(),any())).thenThrow(new IllegalArgumentException("Oracle unavailable 12516"));
+        clearInvocations(oracle);
+        var rule=new ExtractionProjectService.Delta("RANGE","LAST_UPDATED","BUSINESS_DATE","BUSINESS_DATE_END","","",">=","<");
+        var request=new ExtractionProjectService.Request(List.of(table),"JDBC","|",1,"PBI","SG","./output","","{table}.dat",null,java.util.Map.of(Long.toString(table),new ExtractionProjectService.TableOption("","",rule)));
+        String path="/api/connections/"+id+"/extraction-project";
+        mvc.perform(post(path+"/configuration").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request))).andExpect(status().isOk());
+        mvc.perform(get(path+"/configuration")).andExpect(status().isOk()).andExpect(jsonPath("$.settings.tableOptions."+table+".delta.column").value("LAST_UPDATED"));
+        verifyNoInteractions(oracle);
+        // Metadata-dependent actions still report source failures rather than silently succeeding.
+        mvc.perform(get(path+"/columns/"+table)).andExpect(status().isBadRequest());
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request))).andExpect(status().isBadRequest());
     }
 
 }

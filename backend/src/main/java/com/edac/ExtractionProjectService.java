@@ -31,9 +31,13 @@ public class ExtractionProjectService {
         registry.table(connection,id);var excluded=new HashSet<>(db.queryForList("SELECT column_name FROM column_exclusion WHERE table_id=?",String.class,id));
         return registry.mappingFields(connection,id).stream().map(MappingField::column).filter(c->!excluded.contains(c.name())).toList();
     }
-    public List<ColumnOption> columns(long connection,long table){oracle(connection);return included(connection,table).stream().map(c->new ColumnOption(c.name(),c.dataType(),numeric(c.dataType()),deltaType(c.dataType()))).toList();}
+    public List<ColumnOption> columns(long connection,long table){
+        oracle(connection);registry.table(connection,table);
+        var excluded=new HashSet<>(db.queryForList("SELECT column_name FROM column_exclusion WHERE table_id=?",String.class,table));
+        return registry.columns(connection,table).stream().filter(c->!excluded.contains(c.name())).map(c->new ColumnOption(c.name(),c.dataType(),numeric(c.dataType()),deltaType(c.dataType()))).toList();
+    }
     private record Prepared(ConnectionProfile profile,List<Map<String,Object>> tables,Map<String,String> queries) {}
-    private Prepared prepare(long connection,Request input) {
+    private ConnectionProfile validateConfiguration(long connection,Request input) {
         var profile=oracle(connection);
         if(!Set.of("JDBC","SQLCL").contains(input.engine()))throw new IllegalArgumentException("Choose JDBC Cursor or SQLcl.");
         if(input.tableIds().size()!=new HashSet<>(input.tableIds()).size())throw new IllegalArgumentException("Select each table only once.");
@@ -44,6 +48,25 @@ public class ExtractionProjectService {
         if(input.engine().equals("SQLCL")&&(input.sqlclExecutable()==null||input.sqlclExecutable().isBlank()))throw new IllegalArgumentException("Provide the installed SQLcl executable path.");
         var selected=input.tableIds().stream().map(String::valueOf).collect(java.util.stream.Collectors.toSet());
         if(!selected.containsAll(input.tableOptions().keySet()))throw new IllegalArgumentException("Table options must belong to selected tables.");
+        for(long id:input.tableIds()) {
+            var table=registry.table(connection,id);var option=input.tableOptions().get(Long.toString(id));
+            if(input.tableOptions().containsKey(Long.toString(id))&&option==null)throw new IllegalArgumentException("Table rules cannot be null.");
+            if(!"Delta".equalsIgnoreCase(table.loadStrategy()))continue;
+            Delta rule=option==null?null:option.delta();
+            if(rule==null||!Set.of("RANGE","FLAG").contains(Objects.toString(rule.mode(),"")))throw new IllegalArgumentException("Configure a Range or Flag delta rule for "+table.name());
+            if(rule.column()==null||rule.column().isBlank())throw new IllegalArgumentException("Choose a delta column for "+table.name());
+            RegistryService.identifier(rule.column());
+            if(rule.mode().equals("FLAG")) {
+                if(rule.flagValue()==null||rule.flagValue().isBlank())throw new IllegalArgumentException("Provide a flag value for "+table.name());
+            }else {
+                if(!Set.of("BUSINESS_DATE","CHECKPOINT","PARAMETER").contains(Objects.toString(rule.lowerSource(),""))||!Set.of("BUSINESS_DATE_END","PARAMETER").contains(Objects.toString(rule.upperSource(),"")))throw new IllegalArgumentException("Invalid delta bound source.");
+                if(!Set.of(">",">=").contains(Objects.toString(rule.lowerOperator(),""))||!Set.of("<","<=").contains(Objects.toString(rule.upperOperator(),"")))throw new IllegalArgumentException("Invalid delta range operator.");
+            }
+        }
+        return profile;
+    }
+    private Prepared prepare(long connection,Request input) {
+        var profile=validateConfiguration(connection,input);
         var tables=new ArrayList<Map<String,Object>>();var queries=new LinkedHashMap<String,String>();
         for(long id:input.tableIds()) {
             var table=registry.table(connection,id);var columns=included(connection,id);if(columns.isEmpty())throw new IllegalArgumentException("No included columns for "+table.name());
@@ -100,7 +123,7 @@ public class ExtractionProjectService {
         return new Configuration(copy(saved,saved.tableIds().stream().filter(id->available.contains(id.toString())).toList(),options));
     }
     @Transactional public Configuration save(long connection,Request input) throws IOException {
-        prepare(connection,input);persist(connection,input);return configuration(connection);
+        validateConfiguration(connection,input);persist(connection,input);return configuration(connection);
     }
     private static Request copy(Request input,List<Long> ids,Map<String,TableOption> options) {
         return new Request(ids,input.engine(),input.delimiter(),input.parallelJobs(),input.systemCode(),input.countryCode(),input.outputDirectory(),input.deliveryDirectory(),input.fileNamePattern(),input.sqlclExecutable(),options);
