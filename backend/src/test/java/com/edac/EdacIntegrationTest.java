@@ -156,7 +156,7 @@ class EdacIntegrationTest {
         return json.readTree(response.getResponse().getContentAsString()).get("id").asLong();
     }
     @Test void usesH2ConfigurationAndSavedCredentialsForOracle() throws Exception {
-        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("18"));
+        mvc.perform(get("/api/status")).andExpect(status().isOk()).andExpect(jsonPath("$.migrationVersion").value("19"));
         long id=connection();
         when(oracle.test(any(),eq("test-secret"))).thenReturn(new Models.TestResult(true,"Oracle test",List.of()));
         when(oracle.discover(any(),eq("test-secret"))).thenReturn(List.of(new Models.TableName("APP","CUSTOMER"),new Models.TableName("APP","ACCOUNT")));
@@ -506,6 +506,32 @@ class EdacIntegrationTest {
         mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(invalid))).andExpect(status().isBadRequest());
         mvc.perform(post("/api/connections/"+other+"/extraction-project").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
         mvc.perform(get("/api/connections/"+other+"/extraction-project/columns/"+table)).andExpect(status().isNotFound());
+    }
+
+    @Test void savesExtractionConfigurationAcrossInstancesAndPreservesDeselectedRules() throws Exception {
+        long id=connection(),other=connection();registry.append(id,List.of("FULL_TABLE","DELTA_TABLE"),"MANUAL");
+        var registered=registry.tables(id);long full=registered.stream().filter(t->t.name().equals("FULL_TABLE")).findFirst().orElseThrow().id(),delta=registered.stream().filter(t->t.name().equals("DELTA_TABLE")).findFirst().orElseThrow().id();
+        db.update("UPDATE table_registry SET load_strategy='Delta' WHERE id=?",delta);
+        when(oracle.mappingFields(any(),anyString(),any())).thenReturn(List.of(new Models.MappingField(new Models.ColumnDetail(1,"ID","NUMBER",22,null,10,0,false,true),null,null,null)));
+        String base="/api/connections/"+id+"/extraction-project/configuration";
+        var rule=new ExtractionProjectService.Delta("RANGE","ID","CHECKPOINT","PARAMETER","0","",">","<=");
+        var request=new ExtractionProjectService.Request(List.of(full,delta),"SQLCL","||",3,"PBI","SG","/output","/delivery","{table}.dat","/tools/sqlcl/bin/sql",java.util.Map.of(Long.toString(delta),new ExtractionProjectService.TableOption("IGNORED","",rule)));
+        String body=json.writeValueAsString(request);
+        mvc.perform(get(base)).andExpect(jsonPath("$.settings").isEmpty());
+        mvc.perform(post(base).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isOk()).andExpect(jsonPath("$.settings.engine").value("SQLCL"));
+        var reopened=new ExtractionProjectService(registry,db,json);assertThat(reopened.configuration(id).settings().tableOptions().get(Long.toString(delta)).delta()).isEqualTo(rule);
+        assertThat(reopened.configuration(other).settings()).isNull();
+        var fullOnly=new ExtractionProjectService.Request(List.of(full),"JDBC"," ",1,"PBI","SG","./output","","{table}.dat",null,java.util.Map.of());
+        reopened.save(id,fullOnly);var saved=reopened.configuration(id).settings();assertThat(saved.tableIds()).containsExactly(full);assertThat(saved.tableOptions().get(Long.toString(delta)).delta()).isEqualTo(rule);
+        // Failed validation must preserve the last good configuration.
+        var invalid=new ExtractionProjectService.Request(List.of(delta),"JDBC","|",1,"PBI","SG","./output","","{table}.dat",null,java.util.Map.of());
+        mvc.perform(post(base).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(invalid))).andExpect(status().isBadRequest());
+        assertThat(reopened.configuration(id).settings().delimiter()).isEqualTo(" ");
+        mvc.perform(post(base).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/connections/"+other+"/extraction-project/configuration").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isNotFound());
+        // Successful generation saves settings too; removed table rules are discarded on reload.
+        reopened.generate(id,request);assertThat(reopened.configuration(id).settings().delimiter()).isEqualTo("||");
+        db.update("DELETE FROM table_registry WHERE id=?",delta);assertThat(reopened.configuration(id).settings().tableOptions()).doesNotContainKey(Long.toString(delta));
     }
 
 }

@@ -48,11 +48,27 @@ class ExtractionProjectServiceTest {
  @Test void predicatesUseBindsAndExcludedColumnsCannotBecomeDeltaOrSum() throws Exception {
   assertThat(ExtractionProjectService.sqlclExpression(new ColumnDetail(1,"TS","TIMESTAMP WITH TIME ZONE",13,null,null,null,true,true))).contains("SYS_EXTRACT_UTC");
   assertThat(ExtractionProjectService.sqlclExpression(new ColumnDetail(1,"RAW_VALUE","RAW",2000,null,null,null,true,true))).contains("TO_CLOB('V')");
+  when(registry.table(1,10)).thenReturn(new TableEntry(10,1,"APP","CUSTOMERS","MANUAL","", "Delimited","Delta","Daily"));
   Delta rule=new Delta("RANGE","ID","CHECKPOINT","PARAMETER","0","",">","<=");
   assertThat(unzip(service.generate(1,request("JDBC",rule))).get("src/main/resources/sql/t10.sql")).contains("WHERE \"ID\" > ? AND \"ID\" <= ?");
   assertThat(unzip(service.generate(1,request("SQLCL",rule))).get("src/main/resources/sql/t10.sql")).contains("TO_NUMBER(:edac_from)","TO_NUMBER(:edac_to)");
   assertThatThrownBy(()->service.generate(1,request("JDBC",new Delta("FLAG","EXCLUDED","PARAMETER","PARAMETER","","Y",">","<=")))).hasMessageContaining("included delta column");
   assertThatThrownBy(()->service.generate(1,request("JDBC",new Delta("RANGE","ID","BUSINESS_DATE","BUSINESS_DATE_END","","",">=","<")))).hasMessageContaining("Numeric ranges");
+ }
+ @Test void derivesStrategyFrequencyAndFirstIncludedNumericFieldFromRegistry() throws Exception {
+  when(registry.mappingFields(1,10)).thenReturn(List.of(field(1,"NAME","VARCHAR2"),field(2,"EXCLUDED","NUMBER"),field(3,"AMOUNT","NUMBER"),field(4,"ID","NUMBER")));
+  var stale=new Request(List.of(10L),"JDBC","|",1,"PBI","SG","./output","","{table}.dat",null,Map.of("10",new TableOption("WRONG","ID",new Delta("FLAG","ID","PARAMETER","PARAMETER","","1",">","<="))));
+  var defs=json.readTree(unzip(service.generate(1,stale)).get("src/main/resources/extraction-definitions.json")).get("tables").get(0);
+  assertThat(defs.get("controlSumColumn").asText()).isEqualTo("AMOUNT");assertThat(defs.get("group").asText()).isEqualTo("Daily");assertThat(defs.get("delta").get("mode").asText()).isEqualTo("FULL");
+  when(registry.mappingFields(1,10)).thenReturn(List.of(field(1,"NAME","VARCHAR2")));
+  assertThat(json.readTree(unzip(service.generate(1,request("JDBC",null))).get("src/main/resources/extraction-definitions.json")).get("tables").get(0).get("controlSumColumn").asText()).isEmpty();
+ }
+ @Test void deltaTablesRequireRangeOrFlagAndExplicitDateConversions() throws Exception {
+  when(registry.table(1,10)).thenReturn(new TableEntry(10,1,"APP","CUSTOMERS","MANUAL","", "Delimited","Delta","Daily"));
+  assertThatThrownBy(()->service.generate(1,request("JDBC",null))).hasMessageContaining("Range or Flag");
+  when(registry.mappingFields(1,10)).thenReturn(List.of(field(1,"UPDATED","DATE")));
+  var date=new Delta("RANGE","UPDATED","BUSINESS_DATE","BUSINESS_DATE_END","","",">=","<");
+  assertThat(unzip(service.generate(1,request("SQLCL",date))).get("src/main/resources/sql/t10.sql")).contains("TO_DATE(:edac_from, 'YYYY-MM-DD HH24:MI:SS')","TO_DATE(:edac_to, 'YYYY-MM-DD HH24:MI:SS')");
  }
  @Test void generatedJdbcRunsAcrossFetchBoundaryAndResumesDeliveryWithoutRequery() throws Exception {
   var files=unzip(service.generate(1,request("JDBC",null)));
@@ -136,6 +152,19 @@ public class RuntimeHarness {
   assertTrue(Files.readString(root.resolve("output/runs/20261104/delta-2/APP_CUSTOMERS_20261104.dat")).endsWith("T|1|2\\n"));
   env.withProperty("extraction.request-id","delta-empty");var emptyDelta=new RunCoordinator(env,counted);emptyDelta.run(new DefaultApplicationArguments());assertEquals(0,emptyDelta.exitCode());assertEquals(4,calls.get());
   assertTrue(Files.readString(root.resolve("output/runs/20261104/delta-empty/APP_CUSTOMERS_20261104.dat")).endsWith("T|0|0\\n"));
+  for(String type:List.of("DATE","TIMESTAMP")) {
+   var businessDelta=new Definitions.Delta("RANGE","UPDATED",type,"BUSINESS_DATE","BUSINESS_DATE_END","","",">=","<");
+   var businessTable=new Definitions.Table(table.id(),table.schema(),table.name(),table.group(),table.columns(),businessDelta,table.controlSumColumn(),table.sqlResource());
+   Files.writeString(defsPath,new ObjectMapper().writeValueAsString(new Definitions("JDBC",List.of(businessTable))));
+   var dates=new java.util.ArrayList<Definitions.Window>();Extractor capture=(t,w,p,work,day)->{dates.add(w);try(var out=new DelimitedOutput(p,"|","PBI","SG",day,t)){return out.finish();}};
+   for(String date:List.of("20261105","2026-12-31")) {
+    env.withProperty("extraction.business-date",date).withProperty("extraction.request-id","business-"+type+"-"+date).withProperty("extraction.parameters.t10-to","");
+    var run=new RunCoordinator(env,capture);run.run(new DefaultApplicationArguments());assertEquals(0,run.exitCode());
+   }
+   String suffix=type.equals("TIMESTAMP")?".0":"";
+   assertEquals(List.of("2026-11-05 00:00:00"+suffix,"2026-11-06 00:00:00"+suffix),dates.get(0).values());
+   assertEquals(List.of("2026-12-31 00:00:00"+suffix,"2027-01-01 00:00:00"+suffix),dates.get(1).values());
+  }
   // Exercise the SQLcl marker decoder and custom multi-character delimiter without launching SQLcl.
   Path decoded=root.resolve("decoded.dat");try(var out=new DelimitedOutput(decoded,"||","PBI","SG",LocalDate.of(2026,11,4),table)){out.sqlclRow(Arrays.asList("V1","N","Vquote\\\"line\\n~EDAC_LOB_END~"));out.finish();}
   Path truncated=root.resolve("truncated.dat");try(var out=new DelimitedOutput(truncated,"|","PBI","SG",LocalDate.of(2026,11,4),table)){assertThrows(java.io.IOException.class,()->out.sqlclRow(Arrays.asList("V1","N","Vtruncated")));}

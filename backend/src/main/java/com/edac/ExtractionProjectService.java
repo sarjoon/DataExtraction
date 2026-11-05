@@ -10,6 +10,7 @@ import jakarta.validation.constraints.*;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ExtractionProjectService {
@@ -22,7 +23,7 @@ public class ExtractionProjectService {
     public record ColumnOption(String name,String dataType,boolean numeric,String deltaType) {}
     private final RegistryService registry;private final JdbcTemplate db;private final ObjectMapper json;
     public ExtractionProjectService(RegistryService registry,JdbcTemplate db,ObjectMapper json){this.registry=registry;this.db=db;this.json=json;}
-    static boolean numeric(String type){return type.toUpperCase(Locale.ROOT).matches("NUMBER|NUMERIC|DECIMAL|INTEGER|INT|SMALLINT|BIGINT|TINYINT|FLOAT|BINARY_FLOAT|BINARY_DOUBLE|DOUBLE PRECISION|REAL");}
+    static boolean numeric(String type){return type.toUpperCase(Locale.ROOT).matches("NUMBER|NUMERIC|DECIMAL|INTEGER|INT|SMALLINT|BIGINT|TINYINT|FLOAT|BINARY_FLOAT|BINARY_DOUBLE|DOUBLE PRECISION|REAL|DECFLOAT");}
     private static String q(String name){return "\""+RegistryService.identifier(name)+"\"";}
     private static String deltaType(String type){return numeric(type)?"NUMBER":type.equalsIgnoreCase("DATE")?"DATE":type.toUpperCase(Locale.ROOT).startsWith("TIMESTAMP")?"TIMESTAMP":Set.of("CHAR","NCHAR","VARCHAR","VARCHAR2","NVARCHAR2").contains(type.toUpperCase(Locale.ROOT))?"TEXT":"";}
     private ConnectionProfile oracle(long id){var profile=registry.connection(id);if(!profile.databaseType().equals("ORACLE"))throw new IllegalArgumentException("Extraction project generation requires an Oracle connection.");return profile;}
@@ -31,7 +32,8 @@ public class ExtractionProjectService {
         return registry.mappingFields(connection,id).stream().map(MappingField::column).filter(c->!excluded.contains(c.name())).toList();
     }
     public List<ColumnOption> columns(long connection,long table){oracle(connection);return included(connection,table).stream().map(c->new ColumnOption(c.name(),c.dataType(),numeric(c.dataType()),deltaType(c.dataType()))).toList();}
-    public byte[] generate(long connection,Request input) throws IOException {
+    private record Prepared(ConnectionProfile profile,List<Map<String,Object>> tables,Map<String,String> queries) {}
+    private Prepared prepare(long connection,Request input) {
         var profile=oracle(connection);
         if(!Set.of("JDBC","SQLCL").contains(input.engine()))throw new IllegalArgumentException("Choose JDBC Cursor or SQLcl.");
         if(input.tableIds().size()!=new HashSet<>(input.tableIds()).size())throw new IllegalArgumentException("Select each table only once.");
@@ -46,9 +48,11 @@ public class ExtractionProjectService {
         for(long id:input.tableIds()) {
             var table=registry.table(connection,id);var columns=included(connection,id);if(columns.isEmpty())throw new IllegalArgumentException("No included columns for "+table.name());
             var option=input.tableOptions().getOrDefault(Long.toString(id),new TableOption(table.updateFrequency(),"",null));
-            String sum=option.controlSumColumn()==null?"":option.controlSumColumn();
-            if(!sum.isBlank()&&columns.stream().noneMatch(c->c.name().equals(sum)&&numeric(c.dataType())))throw new IllegalArgumentException("Control sum must be an included numeric column for "+table.name());
-            var delta=delta(table,columns,option.delta());String key="t"+id;var columnDefinitions=new ArrayList<Map<String,Object>>();
+            if(option==null)throw new IllegalArgumentException("Table rules cannot be null.");
+            String sum=columns.stream().filter(c->numeric(c.dataType())).map(ColumnDetail::name).findFirst().orElse("");
+            boolean incremental="Delta".equalsIgnoreCase(table.loadStrategy());
+            if(incremental&&(option.delta()==null||!Set.of("RANGE","FLAG").contains(Objects.toString(option.delta().mode(),""))))throw new IllegalArgumentException("Configure a Range or Flag delta rule for "+table.name());
+            var delta=delta(table,columns,incremental?option.delta():new Delta("FULL","","PARAMETER","PARAMETER","","",">=","<"));String key="t"+id;var columnDefinitions=new ArrayList<Map<String,Object>>();
             var projection=new ArrayList<String>();boolean sqlcl=input.engine().equals("SQLCL"),hasBlob=false;
             for(int i=0;i<columns.size();i++) {
                 var c=columns.get(i);String type=c.dataType().toUpperCase(Locale.ROOT);boolean lob=Set.of("CLOB","NCLOB","BLOB").contains(type);
@@ -62,9 +66,13 @@ public class ExtractionProjectService {
             else if(sqlcl)sql+=";\n";
             queries.put("src/main/resources/sql/"+key+".sql",sql);
             var definition=new LinkedHashMap<String,Object>();definition.put("id",key);definition.put("schema",table.schema());definition.put("name",table.name());
-            definition.put("group",option.group()==null||option.group().isBlank()?table.updateFrequency():option.group().trim());definition.put("columns",columnDefinitions);
+            definition.put("group",table.updateFrequency());definition.put("columns",columnDefinitions);
             definition.put("delta",delta);definition.put("controlSumColumn",sum);definition.put("sqlResource","/sql/"+key+".sql");tables.add(definition);
         }
+        return new Prepared(profile,tables,queries);
+    }
+    public byte[] generate(long connection,Request input) throws IOException {
+        var prepared=prepare(connection,input);var profile=prepared.profile();var tables=prepared.tables();var queries=prepared.queries();
         String root="extraction-"+input.engine().toLowerCase(Locale.ROOT)+"/";var bytes=new ByteArrayOutputStream();
         try(var zip=new ZipOutputStream(bytes,StandardCharsets.UTF_8)) {
             put(zip,root+"pom.xml",pom(input.engine()));
@@ -78,7 +86,35 @@ public class ExtractionProjectService {
             put(zip,root+".gitignore","target/\noutput/\n*.log\n.env\n");
             put(zip,root+"src/test/java/com/edac/extraction/OutputContractTest.java",testSource());
         }
+        persist(connection,input);
         return bytes.toByteArray();
+    }
+    public record Configuration(Request settings) {}
+    public Configuration configuration(long connection) throws IOException {
+        oracle(connection);
+        var rows=db.queryForList("SELECT settings_json FROM extraction_project_configuration WHERE connection_id=?",String.class,connection);
+        if(rows.isEmpty())return new Configuration(null);
+        var saved=json.readValue(rows.get(0),Request.class);
+        var available=registry.tables(connection).stream().map(t->Long.toString(t.id())).collect(java.util.stream.Collectors.toSet());
+        var options=new LinkedHashMap<String,TableOption>();saved.tableOptions().forEach((id,option)->{if(available.contains(id))options.put(id,option);});
+        return new Configuration(copy(saved,saved.tableIds().stream().filter(id->available.contains(id.toString())).toList(),options));
+    }
+    @Transactional public Configuration save(long connection,Request input) throws IOException {
+        prepare(connection,input);persist(connection,input);return configuration(connection);
+    }
+    private static Request copy(Request input,List<Long> ids,Map<String,TableOption> options) {
+        return new Request(ids,input.engine(),input.delimiter(),input.parallelJobs(),input.systemCode(),input.countryCode(),input.outputDirectory(),input.deliveryDirectory(),input.fileNamePattern(),input.sqlclExecutable(),options);
+    }
+    private void persist(long connection,Request input) throws IOException {
+        // Keep rules for deselected tables. Registry metadata remains authoritative for strategy, frequency and sums.
+        var old=configuration(connection).settings();var options=new LinkedHashMap<String,TableOption>();
+        if(old!=null)options.putAll(old.tableOptions());
+        for(long id:input.tableIds()) {
+            var table=registry.table(connection,id);var option=input.tableOptions().get(Long.toString(id));
+            options.put(Long.toString(id),new TableOption("","","Delta".equalsIgnoreCase(table.loadStrategy())&&option!=null?option.delta():null));
+        }
+        String value=json.writeValueAsString(copy(input,input.tableIds(),options));
+        db.update("MERGE INTO extraction_project_configuration (connection_id,settings_json,updated_at) KEY(connection_id) VALUES (?,?,CURRENT_TIMESTAMP)",connection,value);
     }
     private static Map<String,String> delta(TableEntry table,List<ColumnDetail> columns,Delta input) {
         if(input==null) {
@@ -202,7 +238,7 @@ Concurrent tables and retries are configurable. Default retries are zero so the 
 Runtime retry reuses the saved delta window. Whole-file restart applies to extraction failures.
 Delivery retries reuse the validated completed file without re-querying Oracle.
 Header: H + delimiter + system + country + business date + generation timestamp (UTC).
-Detail: D + delimiter + included columns in metadata order. Trailer: T + delimiter + count [+ delimiter + selected numeric sum].
+Detail: D + delimiter + included columns in metadata order. Trailer: T + delimiter + count [+ delimiter + automatically selected first numeric-field sum].
 UTF-8, LF, BEL by default. Delimiters can be changed, including custom multi-character delimiters.
 NULL is unquoted \\N, literal \\N is quoted. Quotes double inside quoted values. CR/LF inside values become spaces.
 LOB values are quoted. BLOB and RAW are uppercase hexadecimal. DATE is YYYY-MM-DD, TIMESTAMP is YYYY-MM-DD HH:mm:ss in UTC.
