@@ -225,9 +225,15 @@ public class ExtractionProjectService {
     <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
   </dependencies>
   <build><finalName>extraction</finalName><plugins>
-    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.14.1</version><configuration><release>17</release></configuration></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.12.1</version><configuration><release>17</release></configuration></plugin>
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.6</version></plugin>
-    <plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><configuration><mainClass>com.edac.extraction.ExtractionApplication</mainClass></configuration><executions><execution><goals><goal>repackage</goal></goals></execution></executions></plugin>
+    <plugin>
+      <groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId>
+      <configuration combine.self="override"><mainClass>com.edac.extraction.ExtractionApplication</mainClass><layout>JAR</layout><skip>false</skip></configuration>
+      <executions><execution><id>repackage</id><phase>package</phase><goals><goal>repackage</goal></goals>
+        <configuration combine.self="override"><mainClass>com.edac.extraction.ExtractionApplication</mainClass><layout>JAR</layout><skip>false</skip></configuration>
+      </execution></executions>
+    </plugin>
   </plugins></build>
 </project>
 """;
@@ -260,11 +266,21 @@ Source connection: CONNECTION. Saved passwords are not exported.
 Use JDK 17 or 21 and Maven. Configure your internal Maven repository/settings.xml so the exact parent
 com.uob.ufw:uob-ms-starter:3.6.15.2.RELEASE and its managed dependencies resolve. No replacement parent is provided.
 Run `mvn clean package`. The executable is `target/extraction.jar`.
+The repackage goal is explicitly bound to package and enabled, with executable JAR layout and the extraction main class.
+Check META-INF/MANIFEST.MF: Main-Class must be the Spring Boot launcher and Start-Class must be com.edac.extraction.ExtractionApplication.
+A jar reporting no main manifest attribute has not been packaged as the executable application. Review the Maven repackage output and inherited parent/plugin settings.
+Build source archives and .original jars are not executable application jars.
 
 The external scheduler launches a process and waits for its exit code. There is no internal scheduler or HTTP server.
 Example: `java -jar target/extraction.jar --extraction.business-date=20261104 --extraction.group=Daily --extraction.request-id=daily-20261104`
 The optional start.sh does the same after `chmod +x start.sh`.
-Business dates accept YYYYMMDD or YYYY-MM-DD. Omit group or use ALL to run all generated definitions.
+Business dates accept YYYYMMDD or YYYY-MM-DD.
+Environment example (Linux): export EXTRACTION_BUSINESS_DATE=20261106
+For business-date bounds, this derives start=2026-11-06 00:00:00 and end=2026-11-07 00:00:00.
+For explicit per-table overrides: export EXTRACTION_PARAMETERS_T10_FROM='2026-11-06 00:00:00'
+and export EXTRACTION_PARAMETERS_T10_TO='2026-11-07 00:00:00' (replace T10 with the ID in extraction-definitions.json).
+DATE/TIMESTAMP bounds accept an ISO date or local datetime; timestamps can include fractional seconds. Numeric delta bounds require decimal values.
+The upper operator controls whether the end bound is excluded; use < for the usual next-day-exclusive range. CLI arguments take precedence over environment variables. Omit group or use ALL to run all generated definitions.
 Default request ID is group-businessDate. Repeating the same ID resumes failed tables and skips completed files.
 Use a new request ID for an intentional new run. Do not edit definitions for an existing request ID.
 Exit codes: 0 complete, 1 run/table/delivery failure, 2 invalid run settings, 4 duplicate active request.

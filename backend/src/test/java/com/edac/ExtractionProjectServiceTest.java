@@ -37,6 +37,8 @@ class ExtractionProjectServiceTest {
   for(String engine:List.of("JDBC","SQLCL")){
    var files=unzip(service.generate(1,request(engine,null)));String pom=files.get("pom.xml");
    assertThat(pom).contains("<groupId>com.uob.ufw</groupId>","<artifactId>uob-ms-starter</artifactId>","<version>3.6.15.2.RELEASE</version>","<groupId>com.edac</groupId>","<artifactId>extraction</artifactId>");
+   assertThat(pom).contains("<artifactId>maven-compiler-plugin</artifactId><version>3.12.1</version>","<id>repackage</id><phase>package</phase>","<layout>JAR</layout><skip>false</skip>","combine.self=\"override\"");
+   if(Boolean.getBoolean("edac.verify.packaging")){Path exported=Path.of("target","generated-packaging-verification",engine.toLowerCase(Locale.ROOT));for(var entry:files.entrySet()){Path file=exported.resolve(entry.getKey());Files.createDirectories(file.getParent());Files.writeString(file,entry.getValue());}}
    assertThat(files.keySet()).contains("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"JdbcExtractor.java":"SqlclExtractor.java")).doesNotContain("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"SqlclExtractor.java":"JdbcExtractor.java"));
    String sql=files.get("src/main/resources/sql/CUSTOMERS.sql");assertThat(sql).contains("\"APP\".\"CUSTOMERS\"").doesNotContain("EXCLUDED","WHERE");
    assertThat(files.get("src/main/resources/application.properties")).doesNotContain("test-secret");
@@ -190,6 +192,10 @@ public class RuntimeHarness {
    assertEquals(List.of("2026-11-05 00:00:00"+suffix,"2026-11-06 00:00:00"+suffix),dates.get(0).values());
    assertEquals(List.of("2026-12-31 00:00:00"+suffix,"2027-01-01 00:00:00"+suffix),dates.get(1).values());
   }
+  var environment=new org.springframework.core.env.StandardEnvironment();
+  environment.getPropertySources().addFirst(new org.springframework.core.env.SystemEnvironmentPropertySource("test-environment",Map.of("EXTRACTION_BUSINESS_DATE","20261106","EXTRACTION_PARAMETERS_T10_FROM","2026-11-06 00:00:00","EXTRACTION_PARAMETERS_T10_TO","2026-11-07 00:00:00")));
+  assertEquals("20261106",environment.getProperty("extraction.business-date"));
+  assertEquals("2026-11-06 00:00:00",environment.getProperty("extraction.parameters.t10-from"));assertEquals("2026-11-07 00:00:00",environment.getProperty("extraction.parameters.t10-to"));
   // Exercise the SQLcl marker decoder and custom multi-character delimiter without launching SQLcl.
   Path decoded=root.resolve("decoded.dat");try(var out=new DelimitedOutput(decoded,"||","PBI","SG",LocalDate.of(2026,11,4),table)){out.sqlclRow(Arrays.asList("V1","N","Vquote\\\"line\\n~EDAC_LOB_END~"));out.finish();}
   Path truncated=root.resolve("truncated.dat");try(var out=new DelimitedOutput(truncated,"|","PBI","SG",LocalDate.of(2026,11,4),table)){assertThrows(java.io.IOException.class,()->out.sqlclRow(Arrays.asList("V1","N","Vtruncated")));}
