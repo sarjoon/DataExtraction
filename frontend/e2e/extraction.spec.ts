@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 test('saves and restores delta-only rules while deriving full-table defaults',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));const requests:any[]=[];let saved:any=null;let slowTables=false;let failColumns=true;
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));const requests:any[]=[];let saved:any=null;let slowTables=false;let failColumns=true;let zipFailure:string|null=null;
  const remember=(input:any)=>{const options={...(saved?.tableOptions??{})};for(const id of input.tableIds)options[id]={delta:input.tableOptions[id]?.delta??null};saved={...input,tableOptions:options};};
  await page.route('**/api/**',async route=>{
   const path=new URL(route.request().url()).pathname;let body:unknown={};
@@ -11,6 +11,8 @@ test('saves and restores delta-only rules while deriving full-table defaults',as
   else if(path.endsWith('/extraction-project/configuration')){if(route.request().method()==='POST')remember(route.request().postDataJSON());else if(!slowTables)await new Promise(resolve=>setTimeout(resolve,150));body={settings:saved};}
   else if(path.includes('/extraction-project/columns/')&&failColumns){failColumns=false;await route.fulfill({status:400,json:{message:'Oracle unavailable 12516'}});return;}
   else if(path.includes('/extraction-project/columns/'))body=[{name:'NAME',dataType:'VARCHAR2',numeric:false,deltaType:'TEXT'},{name:'ID',dataType:'NUMBER',numeric:true,deltaType:'NUMBER'},{name:'LAST_UPDATED',dataType:'DATE',numeric:false,deltaType:'DATE'}];
+  else if(path.endsWith('/extraction-project')&&zipFailure==='empty'){await route.fulfill({status:400,body:''});return;}
+  else if(path.endsWith('/extraction-project')&&zipFailure==='json'){await route.fulfill({status:400,json:{message:'Cannot read extraction metadata for APP.ACCOUNTS: Oracle metadata failure',requestId:'zip-test-reference'}});return;}
   else if(path.endsWith('/extraction-project')){const input=route.request().postDataJSON();requests.push(input);remember(input);await route.fulfill({contentType:'application/zip',body:'ZIP'});return;}
   else throw new Error('Unexpected request '+path);
   await route.fulfill({json:body});
@@ -55,5 +57,7 @@ test('saves and restores delta-only rules while deriving full-table defaults',as
  await table.selectOption({label:'APP.ACCOUNTS'});await expect(page.getByRole('combobox',{name:'Delta column',exact:true})).toHaveValue('LAST_UPDATED');
  await page.getByRole('combobox',{name:'Delta column',exact:true}).selectOption('ID');await expect(page.getByRole('combobox',{name:'Lower bound source',exact:true})).toHaveValue('PARAMETER');
  await expect(page.getByRole('combobox',{name:'Lower bound source',exact:true}).locator('option')).toHaveText(['Last successful checkpoint','Run parameter']);
+ zipFailure='empty';await page.getByRole('button',{name:'Generate source project ZIP'}).click();await expect(page.getByRole('alert').filter({hasText:'Source project generation failed (HTTP 400)'})).toBeVisible();
+ zipFailure='json';await page.getByRole('button',{name:'Generate source project ZIP'}).click();await expect(page.getByRole('alert').filter({hasText:'APP.ACCOUNTS'})).toContainText('Reference: zip-test-reference.');
  await page.getByRole('combobox',{name:'Source database connection',exact:true}).selectOption({index:1});await expect(page.getByRole('button',{name:'Generate source project ZIP'})).toBeDisabled();expect(errors).toEqual([]);
 });

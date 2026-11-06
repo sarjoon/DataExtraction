@@ -29,12 +29,24 @@ public class ExtractionProjectService {
     private ConnectionProfile oracle(long id){var profile=registry.connection(id);if(!profile.databaseType().equals("ORACLE"))throw new IllegalArgumentException("Extraction project generation requires an Oracle connection.");return profile;}
     private List<ColumnDetail> included(long connection,long id) {
         registry.table(connection,id);var excluded=new HashSet<>(db.queryForList("SELECT column_name FROM column_exclusion WHERE table_id=?",String.class,id));
-        return registry.mappingFields(connection,id).stream().map(MappingField::column).filter(c->!excluded.contains(c.name())).toList();
+        try{var fields=registry.mappingFields(connection,id);
+            if(fields.isEmpty())throw new SourceTableUnavailableException("Oracle metadata returned no columns; the table may be missing or inaccessible.");
+            return fields.stream().map(MappingField::column).filter(c->!excluded.contains(c.name())).toList();}
+        catch(SourceTableUnavailableException failure){throw failure;}
+        catch(IllegalArgumentException failure){var table=registry.table(connection,id);throw new IllegalArgumentException("Cannot read extraction metadata for "+table.schema()+"."+table.name()+": "+failure.getMessage(),failure);}
     }
     public List<ColumnOption> columns(long connection,long table){
         oracle(connection);registry.table(connection,table);
         var excluded=new HashSet<>(db.queryForList("SELECT column_name FROM column_exclusion WHERE table_id=?",String.class,table));
         return registry.columns(connection,table).stream().filter(c->!excluded.contains(c.name())).map(c->new ColumnOption(c.name(),c.dataType(),numeric(c.dataType()),deltaType(c.dataType()))).toList();
+    }
+    public record UnavailableTable(long tableId,String schema,String table,String reason) {}
+    public static final class SourceTablesUnavailable extends IllegalArgumentException {
+        private final List<UnavailableTable> tables;
+        SourceTablesUnavailable(List<UnavailableTable> tables){
+            super("Cannot generate extraction project: source tables not found or not accessible: "+tables.stream().map(t->t.schema()+"."+t.table()).collect(java.util.stream.Collectors.joining(", "))+". Check TABLE_REGISTRY, source metadata and Oracle permissions.");this.tables=List.copyOf(tables);
+        }
+        public List<UnavailableTable> tables(){return tables;}
     }
     private record Prepared(ConnectionProfile profile,List<Map<String,Object>> tables,Map<String,String> queries) {}
     private ConnectionProfile validateConfiguration(long connection,Request input) {
@@ -67,9 +79,18 @@ public class ExtractionProjectService {
     }
     private Prepared prepare(long connection,Request input) {
         var profile=validateConfiguration(connection,input);
+        var selectedTables=input.tableIds().stream().map(id->registry.table(connection,id)).toList();
+        var nameCounts=selectedTables.stream().collect(java.util.stream.Collectors.groupingBy(t->t.name().toUpperCase(Locale.ROOT),java.util.stream.Collectors.counting()));
+        var metadata=new LinkedHashMap<Long,List<ColumnDetail>>();var unavailable=new ArrayList<UnavailableTable>();
+        for(var table:selectedTables) {
+            try{metadata.put(table.id(),included(connection,table.id()));}
+            catch(SourceTableUnavailableException failure){unavailable.add(new UnavailableTable(table.id(),table.schema(),table.name(),failure.getMessage()));}
+        }
+        if(!unavailable.isEmpty())throw new SourceTablesUnavailable(unavailable);
         var tables=new ArrayList<Map<String,Object>>();var queries=new LinkedHashMap<String,String>();
-        for(long id:input.tableIds()) {
-            var table=registry.table(connection,id);var columns=included(connection,id);if(columns.isEmpty())throw new IllegalArgumentException("No included columns for "+table.name());
+        for(var table:selectedTables) {
+            long id=table.id();var columns=metadata.get(id);if(columns.isEmpty())throw new IllegalArgumentException("No included columns for "+table.schema()+"."+table.name()+". All source columns are excluded.");
+            String sqlFile=(nameCounts.get(table.name().toUpperCase(Locale.ROOT))>1?RegistryService.identifier(table.schema())+"/":"")+RegistryService.identifier(table.name())+".sql";
             var option=input.tableOptions().getOrDefault(Long.toString(id),new TableOption(table.updateFrequency(),"",null));
             if(option==null)throw new IllegalArgumentException("Table rules cannot be null.");
             String sum=columns.stream().filter(c->numeric(c.dataType())).map(ColumnDetail::name).findFirst().orElse("");
@@ -87,10 +108,10 @@ public class ExtractionProjectService {
             String sql="SELECT\n  "+String.join(",\n  ",projection)+"\nFROM "+q(table.schema())+"."+q(table.name())+where(delta,sqlcl)+"\n";
             if(sqlcl&&hasBlob)sql="SET SQLTERMINATOR OFF\nWITH\n"+blobFunction()+"\n"+sql+"/\nSET SQLTERMINATOR ON\n";
             else if(sqlcl)sql+=";\n";
-            queries.put("src/main/resources/sql/"+key+".sql",sql);
+            queries.put("src/main/resources/sql/"+sqlFile,sql);
             var definition=new LinkedHashMap<String,Object>();definition.put("id",key);definition.put("schema",table.schema());definition.put("name",table.name());
             definition.put("group",table.updateFrequency());definition.put("columns",columnDefinitions);
-            definition.put("delta",delta);definition.put("controlSumColumn",sum);definition.put("sqlResource","/sql/"+key+".sql");tables.add(definition);
+            definition.put("delta",delta);definition.put("controlSumColumn",sum);definition.put("sqlResource","/sql/"+sqlFile);tables.add(definition);
         }
         return new Prepared(profile,tables,queries);
     }
@@ -256,6 +277,7 @@ output-directory stores run files, .part files, logs, checkpoints and per-reques
 delivery-directory is optional and can point to mounted application-server storage. Files publish through a temporary sibling and rename.
 Atomic rename is used where supported. Validate filesystem semantics on the deployment host.
 Delivery never publishes an unfinished extraction. Different existing contents require explicit extraction.replace-existing-delivery=true.
+SQL resources use sql/TABLE_NAME.sql; same-named tables in different schemas use sql/SCHEMA/TABLE_NAME.sql.
 Filename tokens: {schema}, {table}, {businessDate}. Each table produces one file. No sorting or cross-table snapshot is imposed.
 Concurrent tables and retries are configurable. Default retries are zero so the external scheduler can own retries.
 Runtime retry reuses the saved delta window. Whole-file restart applies to extraction failures.

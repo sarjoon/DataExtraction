@@ -38,7 +38,7 @@ class ExtractionProjectServiceTest {
    var files=unzip(service.generate(1,request(engine,null)));String pom=files.get("pom.xml");
    assertThat(pom).contains("<groupId>com.uob.ufw</groupId>","<artifactId>uob-ms-starter</artifactId>","<version>3.6.15.2.RELEASE</version>","<groupId>com.edac</groupId>","<artifactId>extraction</artifactId>");
    assertThat(files.keySet()).contains("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"JdbcExtractor.java":"SqlclExtractor.java")).doesNotContain("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"SqlclExtractor.java":"JdbcExtractor.java"));
-   String sql=files.get("src/main/resources/sql/t10.sql");assertThat(sql).contains("\"APP\".\"CUSTOMERS\"").doesNotContain("EXCLUDED","WHERE");
+   String sql=files.get("src/main/resources/sql/CUSTOMERS.sql");assertThat(sql).contains("\"APP\".\"CUSTOMERS\"").doesNotContain("EXCLUDED","WHERE");
    assertThat(files.get("src/main/resources/application.properties")).doesNotContain("test-secret");
    if(engine.equals("SQLCL"))assertThat(pom).doesNotContain("ojdbc11","spring-boot-starter-jdbc");
    else assertThat(pom).doesNotContain("commons-csv");
@@ -50,8 +50,8 @@ class ExtractionProjectServiceTest {
   assertThat(ExtractionProjectService.sqlclExpression(new ColumnDetail(1,"RAW_VALUE","RAW",2000,null,null,null,true,true))).contains("TO_CLOB('V')");
   when(registry.table(1,10)).thenReturn(new TableEntry(10,1,"APP","CUSTOMERS","MANUAL","", "Delimited","Delta","Daily"));
   Delta rule=new Delta("RANGE","ID","CHECKPOINT","PARAMETER","0","",">","<=");
-  assertThat(unzip(service.generate(1,request("JDBC",rule))).get("src/main/resources/sql/t10.sql")).contains("WHERE \"ID\" > ? AND \"ID\" <= ?");
-  assertThat(unzip(service.generate(1,request("SQLCL",rule))).get("src/main/resources/sql/t10.sql")).contains("TO_NUMBER(:edac_from)","TO_NUMBER(:edac_to)");
+  assertThat(unzip(service.generate(1,request("JDBC",rule))).get("src/main/resources/sql/CUSTOMERS.sql")).contains("WHERE \"ID\" > ? AND \"ID\" <= ?");
+  assertThat(unzip(service.generate(1,request("SQLCL",rule))).get("src/main/resources/sql/CUSTOMERS.sql")).contains("TO_NUMBER(:edac_from)","TO_NUMBER(:edac_to)");
   assertThatThrownBy(()->service.generate(1,request("JDBC",new Delta("FLAG","EXCLUDED","PARAMETER","PARAMETER","","Y",">","<=")))).hasMessageContaining("included delta column");
   assertThatThrownBy(()->service.generate(1,request("JDBC",new Delta("RANGE","ID","BUSINESS_DATE","BUSINESS_DATE_END","","",">=","<")))).hasMessageContaining("Numeric ranges");
  }
@@ -68,7 +68,32 @@ class ExtractionProjectServiceTest {
   assertThatThrownBy(()->service.generate(1,request("JDBC",null))).hasMessageContaining("Range or Flag");
   when(registry.mappingFields(1,10)).thenReturn(List.of(field(1,"UPDATED","DATE")));
   var date=new Delta("RANGE","UPDATED","BUSINESS_DATE","BUSINESS_DATE_END","","",">=","<");
-  assertThat(unzip(service.generate(1,request("SQLCL",date))).get("src/main/resources/sql/t10.sql")).contains("TO_DATE(:edac_from, 'YYYY-MM-DD HH24:MI:SS')","TO_DATE(:edac_to, 'YYYY-MM-DD HH24:MI:SS')");
+  assertThat(unzip(service.generate(1,request("SQLCL",date))).get("src/main/resources/sql/CUSTOMERS.sql")).contains("TO_DATE(:edac_from, 'YYYY-MM-DD HH24:MI:SS')","TO_DATE(:edac_to, 'YYYY-MM-DD HH24:MI:SS')");
+ }
+ @Test void namesSqlResourcesByTableAndSeparatesDuplicateSchemaNames() throws Exception {
+  when(registry.table(1,11)).thenReturn(new TableEntry(11,1,"OTHER","CUSTOMERS","MANUAL",""));
+  when(registry.mappingFields(1,11)).thenReturn(List.of(field(1,"ID","NUMBER")));
+  var request=new Request(List.of(10L,11L),"JDBC","|",1,"PBI","SG","./output","","{schema}_{table}.dat",null,Map.of());
+  var files=unzip(service.generate(1,request));assertThat(files.keySet()).contains("src/main/resources/sql/APP/CUSTOMERS.sql","src/main/resources/sql/OTHER/CUSTOMERS.sql").doesNotContain("src/main/resources/sql/t10.sql","src/main/resources/sql/t11.sql");
+  var tables=json.readTree(files.get("src/main/resources/extraction-definitions.json")).get("tables");assertThat(tables.get(0).get("sqlResource").asText()).isEqualTo("/sql/APP/CUSTOMERS.sql");assertThat(tables.get(1).get("sqlResource").asText()).isEqualTo("/sql/OTHER/CUSTOMERS.sql");
+ }
+ @Test void reportsAllUnavailableTablesAndDistinguishesExcludedColumns() throws Exception {
+  when(registry.table(1,11)).thenReturn(new TableEntry(11,1,"APP","MISSING","MANUAL",""));
+  when(registry.mappingFields(1,10)).thenThrow(new SourceTableUnavailableException("No visible source columns"));when(registry.mappingFields(1,11)).thenReturn(List.of());
+  var request=new Request(List.of(10L,11L),"JDBC","|",1,"PBI","SG","./output","","{table}.dat",null,Map.of());
+  var error=catchThrowableOfType(()->service.generate(1,request),SourceTablesUnavailable.class);assertThat(error.tables()).extracting(UnavailableTable::table).containsExactly("CUSTOMERS","MISSING");assertThat(error).hasMessageContaining("APP.CUSTOMERS","APP.MISSING");
+  doReturn(List.of(field(1,"EXCLUDED","NUMBER"))).when(registry).mappingFields(1,10);
+  assertThatThrownBy(()->service.generate(1,request("JDBC",null))).isNotInstanceOf(SourceTablesUnavailable.class).hasMessageContaining("All source columns are excluded");
+ }
+ @Test void mixedFullAndDeltaTablesGenerateDifferentPredicatesForBothMethods() throws Exception {
+  when(registry.table(1,11)).thenReturn(new TableEntry(11,1,"APP","ACCOUNTS","MANUAL","","Master","Delta","Daily"));
+  when(registry.mappingFields(1,11)).thenReturn(List.of(field(1,"ID","NUMBER")));
+  var rule=new Delta("RANGE","ID","CHECKPOINT","PARAMETER","0","",">","<=");
+  for(String engine:List.of("JDBC","SQLCL")) {
+   var request=new Request(List.of(10L,11L),engine,"|",1,"PBI","SG","./output","","{schema}_{table}.dat",engine.equals("SQLCL")?"/tools/sql":null,Map.of("11",new TableOption("","",rule)));
+   var files=unzip(service.generate(1,request));assertThat(files.get("src/main/resources/sql/CUSTOMERS.sql")).doesNotContain("WHERE");
+   assertThat(files.get("src/main/resources/sql/ACCOUNTS.sql")).contains("WHERE",engine.equals("JDBC")?"\"ID\" > ? AND \"ID\" <= ?":"TO_NUMBER(:edac_from)");
+  }
  }
  @Test void generatedJdbcRunsAcrossFetchBoundaryAndResumesDeliveryWithoutRequery() throws Exception {
   var files=unzip(service.generate(1,request("JDBC",null)));

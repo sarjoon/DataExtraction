@@ -552,4 +552,26 @@ class EdacIntegrationTest {
         mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request))).andExpect(status().isBadRequest());
     }
 
+    @Test void sourceProjectErrorsReturnJsonAndLogReferenceForBinaryDownload() throws Exception {
+        long id=connection();registry.append(id,List.of("METADATA_ERROR"),"MANUAL");long table=registry.tables(id).get(0).id();
+        when(oracle.mappingFields(any(),anyString(),any())).thenThrow(new IllegalArgumentException("Oracle metadata failure 12516"));
+        var settings=new ExtractionProjectService.Request(List.of(table),"JDBC","|",1,"PBI","SG","./output","","{table}.dat",null,java.util.Map.of());
+        String path="/api/connections/"+id+"/extraction-project";
+        var response=mvc.perform(post(path).with(csrf()).accept("application/zip").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(settings)))
+            .andExpect(status().isBadRequest()).andExpect(content().contentType(MediaType.APPLICATION_JSON)).andExpect(header().exists("X-EDAC-Request-Id"))
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("APP.METADATA_ERROR"))).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("12516"))).andReturn();
+        assertThat(json.readTree(response.getResponse().getContentAsString()).get("requestId").asText()).isEqualTo(response.getResponse().getHeader("X-EDAC-Request-Id"));
+        mvc.perform(post(path).with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{"))
+            .andExpect(status().isBadRequest()).andExpect(content().contentType(MediaType.APPLICATION_JSON)).andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("valid JSON"))).andExpect(header().exists("X-EDAC-Request-Id"));
+    }
+
+    @Test void missingOracleTablesAreListedInSourceProjectErrorPayload() throws Exception {
+        long id=connection();registry.append(id,List.of("MISSING_A","MISSING_B"),"MANUAL");var ids=registry.tables(id).stream().map(Models.TableEntry::id).toList();
+        when(oracle.mappingFields(any(),anyString(),any())).thenThrow(new SourceTableUnavailableException("Table not found or no accessible columns."));
+        var request=new ExtractionProjectService.Request(ids,"JDBC","|",1,"PBI","SG","./output","","{table}.dat",null,java.util.Map.of());
+        mvc.perform(post("/api/connections/"+id+"/extraction-project").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(request)))
+            .andExpect(status().isBadRequest()).andExpect(content().contentType(MediaType.APPLICATION_JSON)).andExpect(jsonPath("$.code").value("SOURCE_TABLE_UNAVAILABLE"))
+            .andExpect(jsonPath("$.tables.length()").value(2)).andExpect(jsonPath("$.tables[0].schema").value("APP")).andExpect(jsonPath("$.tables[0].table").value("MISSING_A")).andExpect(jsonPath("$.tables[1].table").value("MISSING_B")).andExpect(jsonPath("$.requestId").isNotEmpty());
+    }
+
 }

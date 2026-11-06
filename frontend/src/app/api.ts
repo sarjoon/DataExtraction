@@ -39,7 +39,18 @@ export class Api {
   private async download(path:string,body:unknown){
     await this.get('/csrf');
     try{return await firstValueFrom(this.http.post('/api'+path,body,{responseType:'blob'}));}
-    catch(error){if(error instanceof HttpErrorResponse && error.error instanceof Blob){let message='Workbook generation failed.';try{message=JSON.parse(await error.error.text()).message??message;}catch{}throw new Error(message);}throw error;}
+    catch(error){
+      if(error instanceof HttpErrorResponse){
+        const action=path.endsWith('/extraction-project')?'Source project generation':'Download';
+        let message=`${action} failed (HTTP ${error.status}) for POST /api${path}. The server returned no readable error details.`;
+        let reference=error.headers.get('X-EDAC-Request-Id');
+        try{const value=error.error instanceof Blob?JSON.parse(await error.error.text()):typeof error.error==='string'?JSON.parse(error.error):error.error;
+          if(value?.message)message=String(value.message);else if(value?.detail)message=String(value.detail);if(value?.requestId)reference=String(value.requestId);
+        }catch{}
+        if(reference)message+=` Reference: ${reference}.`;
+        throw new Error(message);
+      }throw error;
+    }
   }
   async select(id:number|null){this.selectedId.set(id);this.tables.set([]);if(id!==null){localStorage.setItem('edac.connection',String(id));await this.refresh();}}
   async refresh(){const id=this.selectedId();if(id!==null){const rows=await this.get<TableEntry[]>(`/connections/${id}/tables`);if(this.selectedId()===id)this.tables.set(rows);}}
