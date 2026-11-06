@@ -42,6 +42,8 @@ class ExtractionProjectServiceTest {
    assertThat(files.keySet()).contains("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"JdbcExtractor.java":"SqlclExtractor.java")).doesNotContain("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"SqlclExtractor.java":"JdbcExtractor.java"));
    String sql=files.get("src/main/resources/sql/CUSTOMERS.sql");assertThat(sql).contains("\"APP\".\"CUSTOMERS\"").doesNotContain("EXCLUDED","WHERE");
    assertThat(files.get("src/main/resources/application.properties")).doesNotContain("test-secret");
+   var settings=new Properties();settings.load(new StringReader(files.get("src/main/resources/application.properties")));
+   assertThat(settings.getProperty("spring.cloud.config.enabled")).isEqualTo("false");assertThat(settings.getProperty("spring.cloud.config.import-check.enabled")).isEqualTo("false");
    if(engine.equals("SQLCL"))assertThat(pom).doesNotContain("ojdbc11","spring-boot-starter-jdbc");
    else assertThat(pom).doesNotContain("commons-csv");
    compile(files,engine);

@@ -239,7 +239,7 @@ public class ExtractionProjectService {
 """;
     }
     private String configuration(ConnectionProfile profile,Request input) throws IOException {
-        var properties=new Properties();properties.setProperty("logging.file.name","${extraction.output-directory}/extraction.log");properties.setProperty("spring.main.web-application-type","none");properties.setProperty("spring.application.name","edac-extraction");
+        var properties=new Properties();properties.setProperty("spring.cloud.config.enabled","false");properties.setProperty("spring.cloud.config.import-check.enabled","false");properties.setProperty("logging.file.name","${extraction.output-directory}/extraction.log");properties.setProperty("spring.main.web-application-type","none");properties.setProperty("spring.application.name","edac-extraction");
         properties.setProperty("extraction.output-directory",input.outputDirectory());properties.setProperty("extraction.delivery-directory",Objects.toString(input.deliveryDirectory(),""));
         properties.setProperty("extraction.parallel-jobs",Integer.toString(input.parallelJobs()));properties.setProperty("extraction.delimiter",input.delimiter());properties.setProperty("extraction.system-code",input.systemCode());properties.setProperty("extraction.country-code",input.countryCode());
         properties.setProperty("extraction.file-name-pattern",input.fileNamePattern());properties.setProperty("extraction.group","ALL");properties.setProperty("extraction.retry-attempts","0");properties.setProperty("extraction.query-timeout-seconds","0");properties.setProperty("extraction.replace-existing-delivery","false");
@@ -288,7 +288,12 @@ Table-lock contention is recorded as a table failure (exit 1). Inspect output/ru
 
 ## Configuration and files
 
-application.properties contains editable defaults. External Spring configuration, environment variables or CLI arguments can override them.
+application.properties contains editable defaults.
+The standalone extractor disables inherited Spring Cloud Config client startup and its import check:
+spring.cloud.config.enabled=false
+spring.cloud.config.import-check.enabled=false
+No Config Server is required. Local/external application.properties, environment variables and CLI arguments remain supported.
+If your deployment intentionally uses a Config Server, enable the client and configure spring.config.import explicitly. External Spring configuration, environment variables or CLI arguments can override them.
 output-directory stores run files, .part files, logs, checkpoints and per-request history. Use a persistent filesystem.
 delivery-directory is optional and can point to mounted application-server storage. Files publish through a temporary sibling and rename.
 Atomic rename is used where supported. Validate filesystem semantics on the deployment host.
