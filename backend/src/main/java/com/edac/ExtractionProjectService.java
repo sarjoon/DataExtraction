@@ -297,6 +297,7 @@ spring.cloud.config.import-check.enabled=false
 No Config Server is required. Local/external application.properties, environment variables and CLI arguments remain supported.
 If your deployment intentionally uses a Config Server, enable the client and configure spring.config.import explicitly. External Spring configuration, environment variables or CLI arguments can override them.
 output-directory stores run files, .part files, logs, checkpoints and per-request history. Use a persistent filesystem.
+Work directories use work/SCHEMA.TABLE_NAME (for example work/APP.CUSTOMERS). Legacy work/t10 directories are renamed under the table lock with all recovery state retained. Conflicting old/new directories produce an explicit error.
 delivery-directory is optional and can point to mounted application-server storage. Files publish through a temporary sibling and rename.
 Atomic rename is used where supported. Validate filesystem semantics on the deployment host.
 Delivery never publishes an unfinished extraction. Different existing contents require explicit extraction.replace-existing-delivery=true.

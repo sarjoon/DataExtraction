@@ -61,6 +61,14 @@ class RecoveryContractTest {
         fake.fail=false;var extraction=new ChunkedExtractor(fake,new MockEnvironment(),settings());Path part=root.resolve("empty.part");
         var stats=extraction.extract(table,WINDOW,part,root.resolve("empty"),date);assertEquals(0,stats.records());assertTrue(Files.readString(part).endsWith("T|0|0\n"));
     }
+    @Test void workFoldersUseSchemaAndTableAndRetainLegacyRecoveryState() throws Exception {
+        Path run=root.resolve("run"),legacy=run.resolve("work/t1");Files.createDirectories(legacy.resolve("chunks/0"));Files.writeString(legacy.resolve("chunks/0/chunk.dat"),"saved chunk");
+        Path named=RunCoordinator.workDirectory(run,table);assertEquals(run.toAbsolutePath().resolve("work/APP.BIG_TABLE"),named);assertFalse(Files.exists(legacy));assertEquals("saved chunk",Files.readString(named.resolve("chunks/0/chunk.dat")));
+        assertEquals(named,RunCoordinator.workDirectory(run,table));
+        var other=new Table("t2","OTHER",table.name(),table.group(),table.columns(),table.delta(),table.controlSumColumn(),table.sqlResource());assertNotEquals(named,RunCoordinator.workDirectory(run,other));
+        var reserved=new Table("t3","APP","CON",table.group(),table.columns(),table.delta(),table.controlSumColumn(),table.sqlResource());assertEquals("APP.%43ON",RunCoordinator.workDirectory(run,reserved).getFileName().toString());
+        Files.createDirectories(legacy);assertThrows(IOException.class,()->RunCoordinator.workDirectory(run,table));assertEquals("saved chunk",Files.readString(named.resolve("chunks/0/chunk.dat")));
+    }
     @Test void chunkQueriesKeepDeltaBindsAndSqlclTerminators() throws Exception {
         Path work=root.resolve("query");var spec=new Properties();spec.setProperty("scn","123456");spec.setProperty("column","ID");spec.setProperty("lower","-1.5");spec.setProperty("upper","0.5");RunCoordinator.save(spec,work.resolve("chunk.properties"));
         String jdbc=ChunkedExtractor.chunkSql(table,"SELECT ID\nFROM \"APP\".\"BIG_TABLE\" WHERE UPDATED >= ? AND UPDATED < ?\n",work);

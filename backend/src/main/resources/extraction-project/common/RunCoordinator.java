@@ -103,7 +103,7 @@ public class RunCoordinator implements ApplicationRunner {
         try(var channel=FileChannel.open(output.resolve("locks").resolve(table.id()+".lock"),StandardOpenOption.CREATE,StandardOpenOption.WRITE);var lock=channel.tryLock()) {
             if(lock==null)throw new IOException("Table is already running: "+table.name());
             String filename=filename(table,date);
-            Path target=run.resolve(filename),part=run.resolve(filename+".part"),work=run.resolve("work").resolve(table.id());Files.createDirectories(work);
+            Path target=run.resolve(filename),part=run.resolve(filename+".part"),work=workDirectory(run,table);
             String key=table.id()+".";
             synchronized(state){if("SUCCESS".equals(state.getProperty(key+"status"))&&Files.isRegularFile(target)&&Long.toString(Files.size(target)).equals(state.getProperty(key+"bytes"))&&sha256(target).equals(state.getProperty(key+"sha256"))&&deliveryValid(filename,state.getProperty(key+"sha256"))){LOG.info("Already completed {}",table.name());return true;}}
             Window window=window(table,date,output,work.resolve("window.properties"));
@@ -146,6 +146,28 @@ public class RunCoordinator implements ApplicationRunner {
             }
         }catch(Exception e){LOG.error("Table {} could not execute",table.name(),e);}
         return false;
+    }
+    /** Schema/table folders avoid ambiguous table names across source schemas. Called under the table lock. */
+    static Path workDirectory(Path run,Table table) throws IOException {
+        Path root=run.resolve("work").toAbsolutePath().normalize();
+        Path named=root.resolve(folderName(table.schema())+"."+folderName(table.name())).normalize();
+        Path legacy=root.resolve(segment(table.id())).normalize();
+        if(!named.startsWith(root)||!legacy.startsWith(root))throw new IOException("Work directory must remain inside the run.");
+        if(Files.exists(legacy)) {
+            if(Files.exists(named))throw new IOException("Both legacy and named work directories exist for "+table.schema()+"."+table.name()+". Resolve the duplicate before retrying: "+legacy+" and "+named);
+            Files.createDirectories(named.getParent());
+            // Do not replace an existing directory or discard any recovery files.
+            try{Files.move(legacy,named,StandardCopyOption.ATOMIC_MOVE);}catch(AtomicMoveNotSupportedException e){Files.move(legacy,named);}
+            LOG.info("Renamed work directory {} to {}",legacy,named);
+        }
+        Files.createDirectories(named);return named;
+    }
+    private static String folderName(String value) {
+        if(value==null||value.isBlank())throw new IllegalArgumentException("Source schema/table name is missing.");
+        var name=new StringBuilder();
+        for(byte raw:value.getBytes(StandardCharsets.UTF_8)){int b=raw&255;if(b>='A'&&b<='Z'||b>='a'&&b<='z'||b>='0'&&b<='9'||b=='_'||b=='-'||b=='$'||b=='#')name.append((char)b);else name.append('%').append(String.format(Locale.ROOT,"%02X",b));}
+        if(name.toString().matches("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])")){int first=name.charAt(0);name.replace(0,1,"%"+String.format(Locale.ROOT,"%02X",first));}
+        return name.toString();
     }
     private boolean deliveryValid(String filename,String checksum) throws Exception {
         String destination=setting("delivery-directory","");if(destination.isBlank())return true;

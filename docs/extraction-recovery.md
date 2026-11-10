@@ -12,6 +12,8 @@ Use the original output directory and run ID. The saved request restores the bus
 
 Completed source and delivery files are checked by size/checksum as applicable. Valid completed files are skipped. Missing/corrupt source files are regenerated; failed delivery reuses the validated source file. Failed/interrupted extraction resumes once the previous process has released its filesystem locks. Existing runs without request.properties can resume with their original launch arguments and settings, without the explicit rerun flag.
 
+Work folders use `work/SCHEMA.TABLE_NAME`, for example `work/APP.CUSTOMERS`. Existing `work/t10` folders are renamed on the next attempt under the table lock, retaining delta windows and chunk checkpoints. If both old and new paths exist, execution reports a conflict rather than overwriting either. Unsafe filesystem characters are percent-encoded.
+
 ## Enable resumable numeric chunks per table
 
 External application.properties example (t10 is the ID in extraction-definitions.json):
