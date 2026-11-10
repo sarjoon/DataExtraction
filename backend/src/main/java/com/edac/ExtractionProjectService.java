@@ -123,12 +123,13 @@ public class ExtractionProjectService {
             put(zip,root+"src/main/resources/application.properties",configuration(profile,input));
             put(zip,root+"src/main/resources/extraction-definitions.json",json.writerWithDefaultPrettyPrinter().writeValueAsString(Map.of("engine",input.engine(),"tables",tables)));
             for(var query:queries.entrySet())put(zip,root+query.getKey(),query.getValue());
-            for(String file:List.of("Definitions.java","Extractor.java","ExtractionApplication.java","DelimitedOutput.java","RunCoordinator.java"))copy(zip,root,"common",file);
+            for(String file:List.of("Definitions.java","Extractor.java","ExtractionApplication.java","DelimitedOutput.java","RunCoordinator.java","ChunkedExtractor.java"))copy(zip,root,"common",file);
             copy(zip,root,input.engine().toLowerCase(Locale.ROOT),input.engine().equals("JDBC")?"JdbcExtractor.java":"SqlclExtractor.java");
             put(zip,root+"README.md",readme(input.engine(),profile));
             put(zip,root+"start.sh","#!/usr/bin/env bash\nset -euo pipefail\nROOT=\"$(cd -- \"$(dirname -- \"${BASH_SOURCE[0]}\")\" && pwd)\"\nexec java -jar \"$ROOT/target/extraction.jar\" \"$@\"\n");
             put(zip,root+".gitignore","target/\noutput/\n*.log\n.env\n");
             put(zip,root+"src/test/java/com/edac/extraction/OutputContractTest.java",testSource());
+            try(var tests=new ClassPathResource("extraction-project/common/RecoveryContractTest.java").getInputStream()){put(zip,root+"src/test/java/com/edac/extraction/RecoveryContractTest.java",new String(tests.readAllBytes(),StandardCharsets.UTF_8));}
         }
         persist(connection,input);
         return bytes.toByteArray();
@@ -226,7 +227,7 @@ public class ExtractionProjectService {
   </dependencies>
   <build><finalName>extraction</finalName><plugins>
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.12.1</version><configuration><release>17</release></configuration></plugin>
-    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.6</version></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.2.5</version></plugin>
     <plugin>
       <groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId>
       <configuration combine.self="override"><mainClass>com.edac.extraction.ExtractionApplication</mainClass><layout>JAR</layout><skip>false</skip></configuration>
@@ -242,6 +243,7 @@ public class ExtractionProjectService {
         var properties=new Properties();properties.setProperty("spring.cloud.config.enabled","false");properties.setProperty("spring.cloud.config.import-check.enabled","false");properties.setProperty("logging.file.name","${extraction.output-directory}/extraction.log");properties.setProperty("spring.main.web-application-type","none");properties.setProperty("spring.application.name","edac-extraction");
         properties.setProperty("extraction.output-directory",input.outputDirectory());properties.setProperty("extraction.delivery-directory",Objects.toString(input.deliveryDirectory(),""));
         properties.setProperty("extraction.parallel-jobs",Integer.toString(input.parallelJobs()));properties.setProperty("extraction.delimiter",input.delimiter());properties.setProperty("extraction.system-code",input.systemCode());properties.setProperty("extraction.country-code",input.countryCode());
+        properties.setProperty("extraction.rerun","");properties.setProperty("extraction.run-id","");
         properties.setProperty("extraction.file-name-pattern",input.fileNamePattern());properties.setProperty("extraction.group","ALL");properties.setProperty("extraction.retry-attempts","0");properties.setProperty("extraction.query-timeout-seconds","0");properties.setProperty("extraction.replace-existing-delivery","false");
         if(input.engine().equals("JDBC")) {
             properties.setProperty("spring.datasource.url","${EXTRACTION_JDBC_URL:"+profile.jdbcUrl()+"}");properties.setProperty("spring.datasource.username","${EXTRACTION_DB_USERNAME:"+profile.username()+"}");properties.setProperty("spring.datasource.password","${EXTRACTION_DB_PASSWORD}");properties.setProperty("spring.datasource.driver-class-name","oracle.jdbc.OracleDriver");properties.setProperty("spring.datasource.hikari.maximum-pool-size",Integer.toString(input.parallelJobs()));
@@ -301,7 +303,7 @@ Delivery never publishes an unfinished extraction. Different existing contents r
 SQL resources use sql/TABLE_NAME.sql; same-named tables in different schemas use sql/SCHEMA/TABLE_NAME.sql.
 Filename tokens: {schema}, {table}, {businessDate}. Each table produces one file. No sorting or cross-table snapshot is imposed.
 Concurrent tables and retries are configurable. Default retries are zero so the external scheduler can own retries.
-Runtime retry reuses the saved delta window. Whole-file restart applies to extraction failures.
+Runtime retry reuses the saved delta window. Whole-file restart applies to extraction failures unless numeric-range chunking is enabled.
 Delivery retries reuse the validated completed file without re-querying Oracle.
 Header: H + delimiter + system + country + business date + generation timestamp (UTC).
 Detail: D + delimiter + included columns in metadata order. Trailer: T + delimiter + count [+ delimiter + automatically selected first numeric-field sum].
@@ -309,6 +311,43 @@ UTF-8, LF, BEL by default. Delimiters can be changed, including custom multi-cha
 NULL is unquoted \\N, literal \\N is quoted. Quotes double inside quoted values. CR/LF inside values become spaces.
 LOB values are quoted. BLOB and RAW are uppercase hexadecimal. DATE is YYYY-MM-DD, TIMESTAMP is YYYY-MM-DD HH:mm:ss in UTC.
 Counters, decimal control totals, byte counts and SHA-256 are calculated while writing. No separate table COUNT is executed.
+
+## Rerun failed or missing files
+
+Use `java -jar target/extraction.jar --extraction.run-id=daily-20261104 --extraction.rerun=failed-or-missing`.
+Supply the same output-directory if it differs from the generated default. The run ID must be unique across business dates.
+The application reloads saved business date, group, delta parameters, delimiter, filename/delivery settings and chunk rules.
+Use the same generated definitions; changed definitions/settings are rejected for an existing request.
+Completed files are verified by size and SHA-256 and skipped; missing/corrupt files are regenerated.
+Delivery retries reuse a validated completed file. Attempt counters accumulate across invocations.
+Request/table filesystem locks prevent concurrent reruns. Interrupted RUNNING tables resume after the old process releases its lock.
+Legacy runs without request.properties can resume by repeating their original launch arguments (without the explicit rerun flag).
+Credentials, SQLcl executable, query timeout and retry-attempts remain runtime settings and are not saved in request.properties.
+
+## Optional resumable large-table extraction (both methods)
+
+Enable per table in external application.properties (replace t10 with the ID in extraction-definitions.json):
+
+```properties
+extraction.chunks.t10.column=ID
+extraction.chunks.t10.range-size=1000000
+extraction.chunks.t10.parallel-jobs=2
+extraction.parallel-jobs=4
+```
+
+No chunk column means the existing single-cursor/single-SQLcl extraction. range-size is a numeric VALUE interval, not a row count.
+Choose a numeric column that leads a valid visible index (validated during planning); sparse keys can produce empty ranges. Confirm Oracle's access plan before production use.
+The application discovers MIN/MAX and uses disjoint >= lower / < upper ranges plus an IS NULL chunk for nullable columns so nullable and duplicate keys are preserved. A nullable-key IS NULL chunk can need a full scan; prefer a NOT NULL indexed key.
+All table chunks use one saved SCN with AS OF SCN. Each table gets its own snapshot; snapshots are not shared between tables.
+The source account needs EXECUTE on DBMS_FLASHBACK and SELECT/FLASHBACK access to the table as appropriate.
+Oracle undo retention must cover extraction and retries. DDL or expired snapshots can prevent retries: start a new request ID to extract the whole table at a new snapshot.
+Chunk workers share the global extraction.parallel-jobs limit with all other extraction queries. For JDBC, size the DataSource pool accordingly.
+Completed chunks are retained with record count, control sum, size and SHA-256. Retries validate and reuse them, extracting only missing or corrupt chunks.
+Chunk files have private work directories and SQLcl logs/staging. Failed chunks restart from their beginning; there is no arbitrary cursor-position resume.
+Final assembly streams detail records into one file with one header and one combined trailer. Empty tables still produce a valid header/trailer.
+Final assembly can restart using completed chunks without querying Oracle. Publication and delta-checkpoint advancement happen only after complete assembly/delivery.
+Keep output storage persistent and budget space for retained chunks plus the assembled file (and SQLcl staging). No automatic chunk deletion is performed.
+Concurrent source updates do not change the saved snapshot. Full exports without chunking still use their query-time snapshot.
 
 ## Delta rules
 

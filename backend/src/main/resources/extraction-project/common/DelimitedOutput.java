@@ -27,7 +27,7 @@ public final class DelimitedOutput implements AutoCloseable {
         this.path=path;this.delimiter=delimiter;this.table=table;
         Files.createDirectories(path.getParent());digest=MessageDigest.getInstance("SHA-256");
         writer=new BufferedWriter(new OutputStreamWriter(new DigestOutputStream(Files.newOutputStream(path),digest),StandardCharsets.UTF_8),65536);
-        writer.write("H");for(String value:List.of(system,country,date.format(DateTimeFormatter.BASIC_ISO_DATE),LocalDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")))){writer.write(delimiter);field(value,false);}writer.write('\n');
+        writer.write("H");for(String value:List.of(system,country,date.format(DateTimeFormatter.BASIC_ISO_DATE),LocalDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")))){writer.write(delimiter);field(value,false);}writer.write('\n');writer.flush();
     }
     private void field(String value,boolean alwaysQuote) throws IOException {
         if(value==null){writer.write("\\N");return;}
@@ -88,6 +88,21 @@ public final class DelimitedOutput implements AutoCloseable {
         writer.write('\n');records++;
         // The next ResultSet.next() (and any next fetch) occurs after this flush.
         if(records%2000==0)writer.flush();
+    }
+    /** Chunk files have the same encoding and contain no embedded record newlines. */
+    public void appendChunk(Path chunk,Stats stats) throws IOException {
+        try(var reader=Files.newBufferedReader(chunk,StandardCharsets.UTF_8)) {
+            char[] buffer=new char[65536];boolean start=true,detail=false;
+            for(int n;(n=reader.read(buffer))!=-1;) {
+                int begin=0;
+                for(int i=0;i<n;i++) {
+                    if(start){detail=buffer[i]=='D';start=false;begin=i;}
+                    if(buffer[i]=='\n'){if(detail)writer.write(buffer,begin,i-begin+1);start=true;begin=i+1;}
+                }
+                if(!start&&detail&&begin<n)writer.write(buffer,begin,n-begin);
+            }
+        }
+        records+=stats.records();if(!stats.controlSum().isBlank())sum=sum.add(new BigDecimal(stats.controlSum()));writer.flush();
     }
     public Stats finish() throws IOException {
         writer.write("T");writer.write(delimiter);writer.write(Long.toString(records));

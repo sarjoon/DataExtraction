@@ -37,8 +37,10 @@ class ExtractionProjectServiceTest {
   for(String engine:List.of("JDBC","SQLCL")){
    var files=unzip(service.generate(1,request(engine,null)));String pom=files.get("pom.xml");
    assertThat(pom).contains("<groupId>com.uob.ufw</groupId>","<artifactId>uob-ms-starter</artifactId>","<version>3.6.15.2.RELEASE</version>","<groupId>com.edac</groupId>","<artifactId>extraction</artifactId>");
-   assertThat(pom).contains("<artifactId>maven-compiler-plugin</artifactId><version>3.12.1</version>","<id>repackage</id><phase>package</phase>","<layout>JAR</layout><skip>false</skip>","combine.self=\"override\"");
+   assertThat(pom).contains("<artifactId>maven-compiler-plugin</artifactId><version>3.12.1</version>","<artifactId>maven-surefire-plugin</artifactId><version>3.2.5</version>","<id>repackage</id><phase>package</phase>","<layout>JAR</layout><skip>false</skip>","combine.self=\"override\"");
    if(Boolean.getBoolean("edac.verify.packaging")){Path exported=Path.of("target","generated-packaging-verification",engine.toLowerCase(Locale.ROOT));for(var entry:files.entrySet()){Path file=exported.resolve(entry.getKey());Files.createDirectories(file.getParent());Files.writeString(file,entry.getValue());}}
+   assertThat(files.keySet()).contains("src/main/java/com/edac/extraction/ChunkedExtractor.java","src/test/java/com/edac/extraction/RecoveryContractTest.java");
+   assertThat(files.get("README.md")).contains("--extraction.rerun=failed-or-missing","extraction.chunks.t10.column=ID","AS OF SCN");
    assertThat(files.keySet()).contains("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"JdbcExtractor.java":"SqlclExtractor.java")).doesNotContain("src/main/java/com/edac/extraction/"+(engine.equals("JDBC")?"SqlclExtractor.java":"JdbcExtractor.java"));
    String sql=files.get("src/main/resources/sql/CUSTOMERS.sql");assertThat(sql).contains("\"APP\".\"CUSTOMERS\"").doesNotContain("EXCLUDED","WHERE");
    assertThat(files.get("src/main/resources/application.properties")).doesNotContain("test-secret");
@@ -47,6 +49,19 @@ class ExtractionProjectServiceTest {
    if(engine.equals("SQLCL"))assertThat(pom).doesNotContain("ojdbc11","spring-boot-starter-jdbc");
    else assertThat(pom).doesNotContain("commons-csv");
    compile(files,engine);
+  }
+ }
+ @Test void generatedRecoveryContractsCoverBothExtractionMethods() throws Exception {
+  for(String engine:List.of("JDBC","SQLCL")) {
+   Path classes=compile(unzip(service.generate(1,request(engine,null))),"recovery-"+engine);
+   try(var loader=new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()},getClass().getClassLoader())) {
+    Class<?> type=loader.loadClass("com.edac.extraction.RecoveryContractTest");
+    for(var method:type.getDeclaredMethods())if(method.isAnnotationPresent(org.junit.jupiter.api.Test.class)) {
+     var constructor=type.getDeclaredConstructor();constructor.setAccessible(true);Object test=constructor.newInstance();
+     var root=type.getDeclaredField("root");root.setAccessible(true);Path testRoot=directory.resolve("contracts-"+engine+"-"+method.getName());Files.createDirectories(testRoot);root.set(test,testRoot);
+     method.setAccessible(true);try{method.invoke(test);}catch(java.lang.reflect.InvocationTargetException failure){throw new AssertionError(engine+" "+method.getName(),failure.getCause());}
+    }
+   }
   }
  }
  @Test void predicatesUseBindsAndExcludedColumnsCannotBecomeDeltaOrSum() throws Exception {
@@ -105,6 +120,19 @@ class ExtractionProjectServiceTest {
   Path classes=compile(files,"runtime");
   try(var loader=new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()},getClass().getClassLoader())){
    loader.loadClass("com.edac.extraction.RuntimeHarness").getMethod("verify",Path.class).invoke(null,directory.resolve("run"));
+  }
+ }
+ @Test void sqlclPlansChunksUsingOnlyExternalSqlclWithoutJdbc() throws Exception {
+  var files=unzip(service.generate(1,request("SQLCL",null)));Path classes=compile(files,"sqlcl-planning");Path work=directory.resolve("sqlcl-plan-work");Files.createDirectories(work);
+  var stdin=new ByteArrayOutputStream();Process process=mock(Process.class);when(process.getOutputStream()).thenReturn(stdin);when(process.waitFor()).thenReturn(0);when(process.exitValue()).thenReturn(0);
+  try(var loader=new URLClassLoader(new java.net.URL[]{classes.toUri().toURL()},getClass().getClassLoader());
+      var mocked=mockConstruction(ProcessBuilder.class,withSettings().defaultAnswer(RETURNS_SELF),(builder,context)->{
+       when(builder.start()).thenAnswer(call->{Files.writeString(work.resolve("plan.csv"),"SCN\n123456\n");return process;});
+      })) {
+   var env=new org.springframework.mock.env.MockEnvironment().withProperty("extraction.sqlcl.executable","/external/sqlcl/bin/sql").withProperty("extraction.sqlcl.connect","APP/test-secret@DB");
+   var type=loader.loadClass("com.edac.extraction.SqlclExtractor");Object extractor=type.getConstructor(org.springframework.core.env.Environment.class).newInstance(env);
+   assertThat(type.getMethod("query",String.class,Path.class).invoke(extractor,"SELECT DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER FROM dual",work)).isEqualTo(List.of(List.of("123456")));
+   assertThat(Files.readString(work.resolve("plan.sql"))).contains("GET_SYSTEM_CHANGE_NUMBER").doesNotContain("test-secret");assertThat(stdin.toString(StandardCharsets.UTF_8)).contains("CONNECT APP/test-secret@DB");
   }
  }
  @Test void sqlclUsesExternalProcessAndDiskCsvWithoutPersistingCredentials() throws Exception {
