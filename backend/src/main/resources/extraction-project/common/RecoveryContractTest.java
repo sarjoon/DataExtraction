@@ -47,6 +47,13 @@ class RecoveryContractTest {
         int total(){return calls.values().stream().mapToInt(AtomicInteger::get).sum();}
     }
     private Properties settings(){var p=new Properties();p.setProperty("delimiter","|");p.setProperty("parallel-jobs","2");p.setProperty("chunks.t1.column","ID");p.setProperty("chunks.t1.range-size","2");p.setProperty("chunks.t1.parallel-jobs","1");return p;}
+    @Test void springContextCreatesCoordinatorWithInjectedDependencies() throws Exception {
+        try(var context=new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
+            context.registerBean(Extractor.class,()->(table,window,part,work,date)->{throw new AssertionError("Startup must not query the source");});
+            context.register(RunCoordinator.class);context.refresh();
+            assertNotNull(context.getBean(RunCoordinator.class));
+        }
+    }
     @Test void failedChunkResumesAtOriginalSnapshotAndAssemblesOneEnvelope() throws Exception {
         var fake=new FakeOracle();var extraction=new ChunkedExtractor(fake,new MockEnvironment(),settings());Path work=root.resolve("work"),part=root.resolve("result.part");
         assertThrows(IOException.class,()->extraction.extract(table,WINDOW,part,work,date));assertEquals(1,fake.calls.get("0").get());assertEquals(3,fake.plans.get());

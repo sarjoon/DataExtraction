@@ -26,6 +26,7 @@ public class RunCoordinator implements ApplicationRunner {
     private static final Logger LOG=LoggerFactory.getLogger(RunCoordinator.class);
     private final Environment env;private final Extractor extractor;private final ObjectMapper json=new ObjectMapper();
     private volatile int exitCode=1;private ExecutorService pool;private final Properties replay=new Properties();private Extractor runtimeExtractor;private Definitions suppliedDefinitions;
+    @org.springframework.beans.factory.annotation.Autowired
     public RunCoordinator(Environment env,Extractor extractor){this.env=env;this.extractor=extractor;}
     RunCoordinator(Environment env,Extractor extractor,Definitions definitions){this(env,extractor);this.suppliedDefinitions=definitions;}
     public int exitCode(){return exitCode;}
