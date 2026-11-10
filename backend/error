@@ -1,124 +1,32 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <parent>
-        <groupId>com.uob.ufw</groupId>
-        <artifactId>uob-ms-starter</artifactId>
-        <version>3.6.15.2.RELEASE</version>
-    </parent>
-    <groupId>com.edac</groupId>
-    <artifactId>edac-backend</artifactId>
-    <version>0.1.0</version>
-    <properties>
-        <java.version>17</java.version>
-        <edac.artifact.name>${project.artifactId}-${project.version}</edac.artifact.name>
-    </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.oracle.database.jdbc</groupId>
-            <artifactId>ojdbc11</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi-ooxml</artifactId>
-            <version>5.4.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-csv</artifactId>
-            <version>1.14.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-    <build>
-        <finalName>${edac.artifact.name}</finalName>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.2.5</version>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.12.1</version>
-                <configuration>
-                    <release>17</release>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <executions>
+2026-11-10T11:12:11.347+08:00 ERROR 19184 --- [edac-extraction] [pool-5-thread-1] [                                                 ] com.edac.extraction.RunCoordinator       : Failed table GRID attempt 1
 
-                    <execution>
+java.nio.file.AccessDeniedException: C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties.tmp -> C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties
+        at java.base/sun.nio.fs.WindowsException.translateToIOException(WindowsException.java:89) ~[na:na]
+        at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:103) ~[na:na]
+        at java.base/sun.nio.fs.WindowsFileCopy.move(WindowsFileCopy.java:317) ~[na:na]
+        at java.base/sun.nio.fs.WindowsFileSystemProvider.move(WindowsFileSystemProvider.java:293) ~[na:na]
+        at java.base/java.nio.file.Files.move(Files.java:1432) ~[na:na]
+        at com.edac.extraction.RunCoordinator.move(RunCoordinator.java:156) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.save(RunCoordinator.java:155) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.extractTable(RunCoordinator.java:83) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.lambda$execute$1(RunCoordinator.java:65) ~[!/:na]
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+        at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
 
-                        <goals>
+2026-11-10T11:12:11.368+08:00 ERROR 19184 --- [edac-extraction] [pool-5-thread-1] [                                                 ] com.edac.extraction.RunCoordinator       : Failed table GUARANTEE attempt 1
 
-                            <goal>repackage</goal>
-
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>com.diffplug.spotless</groupId>
-                <artifactId>spotless-maven-plugin</artifactId>
-                <version>2.43.0</version>
-                <configuration>
-                    <java>
-                        <googleJavaFormat>
-                            <version>1.22.0</version>
-                        </googleJavaFormat>
-                        <removeUnusedImports />
-                        <formatAnnotations />
-                    </java>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>format-check</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
-</project>
+java.nio.file.AccessDeniedException: C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties.tmp -> C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties
+        at java.base/sun.nio.fs.WindowsException.translateToIOException(WindowsException.java:89) ~[na:na]
+        at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:103) ~[na:na]
+        at java.base/sun.nio.fs.WindowsFileCopy.move(WindowsFileCopy.java:317) ~[na:na]
+        at java.base/sun.nio.fs.WindowsFileSystemProvider.move(WindowsFileSystemProvider.java:293) ~[na:na]
+        at java.base/java.nio.file.Files.move(Files.java:1432) ~[na:na]
+        at com.edac.extraction.RunCoordinator.move(RunCoordinator.java:156) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.save(RunCoordinator.java:155) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.extractTable(RunCoordinator.java:83) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.lambda$execute$1(RunCoordinator.java:65) ~[!/:na]
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
