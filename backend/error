@@ -1,32 +1,34 @@
-2026-11-10T11:12:11.347+08:00 ERROR 19184 --- [edac-extraction] [pool-5-thread-1] [                                                 ] com.edac.extraction.RunCoordinator       : Failed table GRID attempt 1
-
-java.nio.file.AccessDeniedException: C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties.tmp -> C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties
-        at java.base/sun.nio.fs.WindowsException.translateToIOException(WindowsException.java:89) ~[na:na]
-        at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:103) ~[na:na]
-        at java.base/sun.nio.fs.WindowsFileCopy.move(WindowsFileCopy.java:317) ~[na:na]
-        at java.base/sun.nio.fs.WindowsFileSystemProvider.move(WindowsFileSystemProvider.java:293) ~[na:na]
-        at java.base/java.nio.file.Files.move(Files.java:1432) ~[na:na]
-        at com.edac.extraction.RunCoordinator.move(RunCoordinator.java:156) ~[!/:na]
-        at com.edac.extraction.RunCoordinator.save(RunCoordinator.java:155) ~[!/:na]
-        at com.edac.extraction.RunCoordinator.extractTable(RunCoordinator.java:83) ~[!/:na]
-        at com.edac.extraction.RunCoordinator.lambda$execute$1(RunCoordinator.java:65) ~[!/:na]
-        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[na:na]
-        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
-        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
-        at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
-
-2026-11-10T11:12:11.368+08:00 ERROR 19184 --- [edac-extraction] [pool-5-thread-1] [                                                 ] com.edac.extraction.RunCoordinator       : Failed table GUARANTEE attempt 1
-
-java.nio.file.AccessDeniedException: C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties.tmp -> C:\Projects\DataExtraction\EDAC_Extraction_JDBC_Project\extraction-jdbc\target\output\runs\20261110\ALL-20261110\run.properties
-        at java.base/sun.nio.fs.WindowsException.translateToIOException(WindowsException.java:89) ~[na:na]
-        at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:103) ~[na:na]
-        at java.base/sun.nio.fs.WindowsFileCopy.move(WindowsFileCopy.java:317) ~[na:na]
-        at java.base/sun.nio.fs.WindowsFileSystemProvider.move(WindowsFileSystemProvider.java:293) ~[na:na]
-        at java.base/java.nio.file.Files.move(Files.java:1432) ~[na:na]
-        at com.edac.extraction.RunCoordinator.move(RunCoordinator.java:156) ~[!/:na]
-        at com.edac.extraction.RunCoordinator.save(RunCoordinator.java:155) ~[!/:na]
-        at com.edac.extraction.RunCoordinator.extractTable(RunCoordinator.java:83) ~[!/:na]
-        at com.edac.extraction.RunCoordinator.lambda$execute$1(RunCoordinator.java:65) ~[!/:na]
-        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[na:na]
-        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
-        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'runCoordinator' defined in URL [jar:nested:/C:/Projects/DataExtraction/EDAC_Extraction_JDBC_Project/extraction-jdbc/target/extraction.jar/!BOOT-INF/classes/!/com/edac/extraction/RunCoordinator.class]: Failed to instantiate [com.edac.extraction.RunCoordinator]: No default constructor found
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateBean(AbstractAutowireCapableBeanFactory.java:1355) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1240) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1235) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1201) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991) ~[spring-context-6.2.19.jar!/:6.2.19]
+        at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628) ~[spring-context-6.2.19.jar!/:6.2.19]
+        at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752) ~[spring-boot-3.5.16.jar!/:3.5.16]
+        at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439) ~[spring-boot-3.5.16.jar!/:3.5.16]
+        at org.springframework.boot.SpringApplication.run(SpringApplication.java:318) ~[spring-boot-3.5.16.jar!/:3.5.16]
+        at com.edac.extraction.ExtractionApplication.main(ExtractionApplication.java:12) ~[!/:na]
+        at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
+        at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
+        at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
+        at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
+        at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:94) ~[extraction.jar:na]
+        at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:52) ~[extraction.jar:na]
+        at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:28) ~[extraction.jar:na]
+Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [com.edac.extraction.RunCoordinator]: No default constructor found
+        at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:119) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateBean(AbstractAutowireCapableBeanFactory.java:1349) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        ... 23 common frames omitted
+Caused by: java.lang.NoSuchMethodException: com.edac.extraction.RunCoordinator.<init>()
+        at java.base/java.lang.Class.getConstructor0(Class.java:3585) ~[na:na]
+        at java.base/java.lang.Class.getDeclaredConstructor(Class.java:2754) ~[na:na]
+        at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:115) ~[spring-beans-6.2.19.jar!/:6.2.19]
+        ... 24 common frames omitted
