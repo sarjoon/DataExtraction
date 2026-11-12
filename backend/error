@@ -1,34 +1,20 @@
-org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'runCoordinator' defined in URL [jar:nested:/C:/Projects/DataExtraction/EDAC_Extraction_JDBC_Project/extraction-jdbc/target/extraction.jar/!BOOT-INF/classes/!/com/edac/extraction/RunCoordinator.class]: Failed to instantiate [com.edac.extraction.RunCoordinator]: No default constructor found
-        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateBean(AbstractAutowireCapableBeanFactory.java:1355) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1240) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:569) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:529) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:339) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:373) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:337) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:202) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1235) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1201) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1130) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:991) ~[spring-context-6.2.19.jar!/:6.2.19]
-        at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:628) ~[spring-context-6.2.19.jar!/:6.2.19]
-        at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752) ~[spring-boot-3.5.16.jar!/:3.5.16]
-        at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439) ~[spring-boot-3.5.16.jar!/:3.5.16]
-        at org.springframework.boot.SpringApplication.run(SpringApplication.java:318) ~[spring-boot-3.5.16.jar!/:3.5.16]
-        at com.edac.extraction.ExtractionApplication.main(ExtractionApplication.java:12) ~[!/:na]
-        at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method) ~[na:na]
-        at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77) ~[na:na]
-        at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43) ~[na:na]
-        at java.base/java.lang.reflect.Method.invoke(Method.java:569) ~[na:na]
-        at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:94) ~[extraction.jar:na]
-        at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:52) ~[extraction.jar:na]
-        at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:28) ~[extraction.jar:na]
-Caused by: org.springframework.beans.BeanInstantiationException: Failed to instantiate [com.edac.extraction.RunCoordinator]: No default constructor found
-        at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:119) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateBean(AbstractAutowireCapableBeanFactory.java:1349) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        ... 23 common frames omitted
-Caused by: java.lang.NoSuchMethodException: com.edac.extraction.RunCoordinator.<init>()
-        at java.base/java.lang.Class.getConstructor0(Class.java:3585) ~[na:na]
-        at java.base/java.lang.Class.getDeclaredConstructor(Class.java:2754) ~[na:na]
-        at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:115) ~[spring-beans-6.2.19.jar!/:6.2.19]
-        ... 24 common frames omitted
+Hi Girish,
+
+Following Sakthi's email regarding the establishment of the TAP Engineering / Dev Factory under my leadership, I would like to initiate the transformation activities, targeting 7 December 2026.
+
+As a first step, could you please confirm whether the project organization structure you shared earlier is still valid or if there have been any changes?
+
+To effectively establish the engineering organization, I would also appreciate your support in formally communicating my role and responsibilities to the technical teams across Malaysia and India. This will enable me to engage directly with the teams and drive the following initiatives:
+
+- **Engineering Structure:** Assess the current organization, identify capability gaps, establish technical ownership and define clear roles and responsibilities.
+- **Engineering Excellence:** Introduce modern engineering practices to build scalable, reliable solutions and improve development efficiency.
+- **Development Governance:** Establish consistent development methodologies, coding standards, code reviews, testing practices and delivery processes.
+- **Team Development:** Assess existing skills, address team concerns, strengthen technical leadership and build a high-performing engineering team.
+- **AI Adoption:** Identify opportunities to embed AI into development, modernization, testing and automation activities, subject to UOB's security and governance requirements.
+
+Although Sakthi has already communicated the leadership responsibility, formal communication to the teams will help establish the necessary alignment and enable effective execution.
+
+Once this is in place, I can work closely with you and the respective technical leads to assess the current state, define the target operating model and establish a practical roadmap towards the December milestone.
+
+Regards,  
+Sarjoon
