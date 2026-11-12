@@ -1,20 +1,358 @@
-Hi Girish,
+2026-11-12T16:24:40.406+08:00 ERROR 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Failed table POSITION attempt 1
 
-Following Sakthi's email regarding the establishment of the TAP Engineering / Dev Factory under my leadership, I would like to initiate the transformation activities, targeting 7 December 2026.
+java.sql.SQLException: ORA-01555: snapshot too old: rollback segment number 26 with name "_SYSSMU26_3476687000$" too small
 
-As a first step, could you please confirm whether the project organization structure you shared earlier is still valid or if there have been any changes?
+https://docs.oracle.com/error-help/db/ora-01555/
+        at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:715) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:615) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4C8Oall.processError(T4C8Oall.java:1372) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CTTIfun.receive(T4CTTIfun.java:969) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CTTIfun.doRPC(T4CTTIfun.java:237) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4C8Oall.doOALL(T4C8Oall.java:524) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CPreparedStatement.doOall8(T4CPreparedStatement.java:298) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CPreparedStatement.fetch(T4CPreparedStatement.java:1770) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.OracleStatement.fetchMoreRows(OracleStatement.java:4383) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.fetchMoreRows(InsensitiveScrollableResultSet.java:951) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.fetchNextRows(InsensitiveScrollableResultSet.java:858) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.absoluteInternal(InsensitiveScrollableResultSet.java:830) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.next(InsensitiveScrollableResultSet.java:529) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at com.zaxxer.hikari.pool.HikariProxyResultSet.next(HikariProxyResultSet.java) ~[HikariCP-6.3.3.jar!/:na]
+        at com.edac.extraction.JdbcExtractor.extract(JdbcExtractor.java:39) ~[!/:na]
+        at com.edac.extraction.ChunkedExtractor.extractSingle(ChunkedExtractor.java:29) ~[!/:na]
+        at com.edac.extraction.ChunkedExtractor.extract(ChunkedExtractor.java:34) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.extractTable(RunCoordinator.java:224) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.lambda$execute$3(RunCoordinator.java:171) ~[!/:na]
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+        at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
+Caused by: Error : 1555, Position : 0, SQL = SELECT
+  "ID",
+  "PORTFOLIO_ID",
+  "PORT_POS_SET_ID",
+  "INSTR_ID",
+  "DEPOSIT_ID",
+  "POS_CURRENCY_ID",
+  "FI_CURRENCY_ID",
+  "PF_CURRENCY_ID",
+  "COUNTERPARTY_THIRD_ID",
+  "OPEN_OPER_ID",
+  "CLOSE_OPER_ID",
+  "TERM_TYPE_ID",
+  "LOCK_TYPE_ID",
+  "VAL_RULE_ELEM_ID",
+  "LAST_USER_ID",
+  "LAST_MODIF_D",
+  "OPEN_OPER_NAT_E",
+  "ADJUSTMENT_NAT_E",
+  "OPEN_OPER_CODE",
+  "CLOSE_OPER_CODE",
+  "REF_OPER_CODE",
+  "REF_NAT_E",
+  "EXECUT_OPER_CODE",
+  "EXECUT_OPER_NAT_E",
+  "EXECUT_OPER_STATUS_E",
+  "REVERS_OPER_CODE",
+  "REVERS_OPER_NAT_E",
+  "LOCK_OPER_CODE",
+  "LOCK_NAT_E",
+  "EVENT_CODE",
+  "EVENT_NUMBER_N",
+  "STATUS_E",
+  "PRIMARY_E",
+  "MAIN_F",
+  "POS_NAT_E",
+  "SUB_POS_NAT_E",
+  "SUB_POS_NAT2_E",
+  "SUB_POS_NAT3_E",
+  "EX_COUPON_F",
+  "FUSION_E",
+  "FUSION_RULE_E",
+  "BEGIN_D",
+  "END_D",
+  "OPERATION_D",
+  "ACCOUNT_D",
+  "VALUE_D",
+  "LOCK_LIMIT_D",
+  "EXPIRATION_D",
+  "ACCR_AMOUNT_M",
+  "ORDER_LIMIT_D",
+  "REMARK_C",
+  "POS_EXCH_RATE",
+  "FI_EXCH_RATE",
+  "SYS_EXCH_RATE",
+  "BOOK_POS_EXCH_RATE",
+  "BOOK_FI_EXCH_RATE",
+  "BOOK_SYS_EXCH_RATE",
+  "QUANTITY_N",
+  "PRICE_N",
+  "SPOT_PRICE_N",
+  "BOOK_PRICE_N",
+  "PRICE_CALC_RULE_E",
+  "QUOTE_N",
+  "SPOT_QUOTE_N",
+  "BOOK_QUOTE_N",
+  "RATE_P",
+  "SUPPL_AMOUNT_M",
+  "POS_GROSS_AMOUNT_M",
+  "POS_NET_AMOUNT_M",
+  "FI_GROSS_AMOUNT_M",
+  "FI_NET_AMOUNT_M",
+  "PF_GROSS_AMOUNT_M",
+  "PF_NET_AMOUNT_M",
+  "SYS_GROSS_AMOUNT_M",
+  "SYS_NET_AMOUNT_M",
+  "BOOK_POS_AMOUNT_M",
+  "BOOK_FI_AMOUNT_M",
+  "BOOK_PF_AMOUNT_M",
+  "BOOK_SYS_AMOUNT_M",
+  "BP1_POS_AMOUNT_M",
+  "BP2_POS_AMOUNT_M",
+  "BP3_POS_AMOUNT_M",
+  "BP4_POS_AMOUNT_M",
+  "BP5_POS_AMOUNT_M",
+  "BP6_POS_AMOUNT_M",
+  "BP7_POS_AMOUNT_M",
+  "BP8_POS_AMOUNT_M",
+  "BP9_POS_AMOUNT_M",
+  "BP10_POS_AMOUNT_M",
+  "HIST_QUOTE_N",
+  "UNPAID_P",
+  "POS_NET_INCREASE_M",
+  "POS_GROSS_INCREASE_M",
+  "POS_NET_DECREASE_M",
+  "POS_GROSS_DECREASE_M",
+  "POS_NET_INCREASE_YEAR_M",
+  "POS_GROSS_INCREASE_YEAR_M",
+  "POS_NET_DECREASE_YEAR_M",
+  "POS_GROSS_DECREASE_YEAR_M",
+  "PF_NET_INCREASE_M",
+  "PF_GROSS_INCREASE_M",
+  "PF_NET_DECREASE_M",
+  "PF_GROSS_DECREASE_M",
+  "PF_NET_INCREASE_YEAR_M",
+  "PF_GROSS_INCREASE_YEAR_M",
+  "PF_NET_DECREASE_YEAR_M",
+  "PF_GROSS_DECREASE_YEAR_M",
+  "ACQUISITION_D",
+  "ACQUISITION_OPEN_OPER_ID",
+  "TAX_LOT_INITIAL_ID",
+  "BP_POS_EXCH_RATE",
+  "BP_FI_EXCH_RATE",
+  "BP_SYS_EXCH_RATE",
+  "CORPORATE_ACTION_NATURE_E",
+  "TAX_LOT_SOURCE_CODE",
+  "STAND_INSTRUCT_ID",
+  "PAYMENT_OPTION_E",
+  "PAYMENT_D",
+  "PAYMENT_STATUS_E",
+  "SETTLEMENT_D",
+  "SETTLE_STATUS_E",
+  "LOCK_QUANTITY_N",
+  "BUSINESS_ACQUISITION_D",
+  "FLOW_INFO_E",
+  "TIMING_RULE_E"
+FROM "AAAMAINDB"."POSITION"
+, Original SQL = SELECT
+  "ID",
+  "PORTFOLIO_ID",
+  "PORT_POS_SET_ID",
+  "INSTR_ID",
+  "DEPOSIT_ID",
+  "POS_CURRENCY_ID",
+  "FI_CURRENCY_ID",
+  "PF_CURRENCY_ID",
+  "COUNTERPARTY_THIRD_ID",
+  "OPEN_OPER_ID",
+  "CLOSE_OPER_ID",
+  "TERM_TYPE_ID",
+  "LOCK_TYPE_ID",
+  "VAL_RULE_ELEM_ID",
+  "LAST_USER_ID",
+  "LAST_MODIF_D",
+  "OPEN_OPER_NAT_E",
+  "ADJUSTMENT_NAT_E",
+  "OPEN_OPER_CODE",
+  "CLOSE_OPER_CODE",
+  "REF_OPER_CODE",
+  "REF_NAT_E",
+  "EXECUT_OPER_CODE",
+  "EXECUT_OPER_NAT_E",
+  "EXECUT_OPER_STATUS_E",
+  "REVERS_OPER_CODE",
+  "REVERS_OPER_NAT_E",
+  "LOCK_OPER_CODE",
+  "LOCK_NAT_E",
+  "EVENT_CODE",
+  "EVENT_NUMBER_N",
+  "STATUS_E",
+  "PRIMARY_E",
+  "MAIN_F",
+  "POS_NAT_E",
+  "SUB_POS_NAT_E",
+  "SUB_POS_NAT2_E",
+  "SUB_POS_NAT3_E",
+  "EX_COUPON_F",
+  "FUSION_E",
+  "FUSION_RULE_E",
+  "BEGIN_D",
+  "END_D",
+  "OPERATION_D",
+  "ACCOUNT_D",
+  "VALUE_D",
+  "LOCK_LIMIT_D",
+  "EXPIRATION_D",
+  "ACCR_AMOUNT_M",
+  "ORDER_LIMIT_D",
+  "REMARK_C",
+  "POS_EXCH_RATE",
+  "FI_EXCH_RATE",
+  "SYS_EXCH_RATE",
+  "BOOK_POS_EXCH_RATE",
+  "BOOK_FI_EXCH_RATE",
+  "BOOK_SYS_EXCH_RATE",
+  "QUANTITY_N",
+  "PRICE_N",
+  "SPOT_PRICE_N",
+  "BOOK_PRICE_N",
+  "PRICE_CALC_RULE_E",
+  "QUOTE_N",
+  "SPOT_QUOTE_N",
+  "BOOK_QUOTE_N",
+  "RATE_P",
+  "SUPPL_AMOUNT_M",
+  "POS_GROSS_AMOUNT_M",
+  "POS_NET_AMOUNT_M",
+  "FI_GROSS_AMOUNT_M",
+  "FI_NET_AMOUNT_M",
+  "PF_GROSS_AMOUNT_M",
+  "PF_NET_AMOUNT_M",
+  "SYS_GROSS_AMOUNT_M",
+  "SYS_NET_AMOUNT_M",
+  "BOOK_POS_AMOUNT_M",
+  "BOOK_FI_AMOUNT_M",
+  "BOOK_PF_AMOUNT_M",
+  "BOOK_SYS_AMOUNT_M",
+  "BP1_POS_AMOUNT_M",
+  "BP2_POS_AMOUNT_M",
+  "BP3_POS_AMOUNT_M",
+  "BP4_POS_AMOUNT_M",
+  "BP5_POS_AMOUNT_M",
+  "BP6_POS_AMOUNT_M",
+  "BP7_POS_AMOUNT_M",
+  "BP8_POS_AMOUNT_M",
+  "BP9_POS_AMOUNT_M",
+  "BP10_POS_AMOUNT_M",
+  "HIST_QUOTE_N",
+  "UNPAID_P",
+  "POS_NET_INCREASE_M",
+  "POS_GROSS_INCREASE_M",
+  "POS_NET_DECREASE_M",
+  "POS_GROSS_DECREASE_M",
+  "POS_NET_INCREASE_YEAR_M",
+  "POS_GROSS_INCREASE_YEAR_M",
+  "POS_NET_DECREASE_YEAR_M",
+  "POS_GROSS_DECREASE_YEAR_M",
+  "PF_NET_INCREASE_M",
+  "PF_GROSS_INCREASE_M",
+  "PF_NET_DECREASE_M",
+  "PF_GROSS_DECREASE_M",
+  "PF_NET_INCREASE_YEAR_M",
+  "PF_GROSS_INCREASE_YEAR_M",
+  "PF_NET_DECREASE_YEAR_M",
+  "PF_GROSS_DECREASE_YEAR_M",
+  "ACQUISITION_D",
+  "ACQUISITION_OPEN_OPER_ID",
+  "TAX_LOT_INITIAL_ID",
+  "BP_POS_EXCH_RATE",
+  "BP_FI_EXCH_RATE",
+  "BP_SYS_EXCH_RATE",
+  "CORPORATE_ACTION_NATURE_E",
+  "TAX_LOT_SOURCE_CODE",
+  "STAND_INSTRUCT_ID",
+  "PAYMENT_OPTION_E",
+  "PAYMENT_D",
+  "PAYMENT_STATUS_E",
+  "SETTLEMENT_D",
+  "SETTLE_STATUS_E",
+  "LOCK_QUANTITY_N",
+  "BUSINESS_ACQUISITION_D",
+  "FLOW_INFO_E",
+  "TIMING_RULE_E"
+FROM "AAAMAINDB"."POSITION"
+, Error Message = ORA-01555: snapshot too old: rollback segment number 26 with name "_SYSSMU26_3476687000$" too small
 
-To effectively establish the engineering organization, I would also appreciate your support in formally communicating my role and responsibilities to the technical teams across Malaysia and India. This will enable me to engage directly with the teams and drive the following initiatives:
+        at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:723) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        ... 22 common frames omitted
 
-- **Engineering Structure:** Assess the current organization, identify capability gaps, establish technical ownership and define clear roles and responsibilities.
-- **Engineering Excellence:** Introduce modern engineering practices to build scalable, reliable solutions and improve development efficiency.
-- **Development Governance:** Establish consistent development methodologies, coding standards, code reviews, testing practices and delivery processes.
-- **Team Development:** Assess existing skills, address team concerns, strengthen technical leadership and build a high-performing engineering team.
-- **AI Adoption:** Identify opportunities to embed AI into development, modernization, testing and automation activities, subject to UOB's security and governance requirements.
+2026-11-12T16:24:40.452+08:00  INFO 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Starting AAAMAINDB.REPORT attempt 1
+2026-11-12T16:24:40.530+08:00  INFO 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Completed REPORT: 168 records
+2026-11-12T16:24:40.542+08:00  INFO 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Starting AAAMAINDB.REQUEST_CODE attempt 1
+2026-11-12T16:24:40.606+08:00  INFO 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Completed REQUEST_CODE: 0 records
+2026-11-12T16:24:40.617+08:00  INFO 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Starting AAAMAINDB.RET_ANALYSIS_DETAILED attempt 1
+2026-11-12T16:24:40.686+08:00  INFO 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Completed RET_ANALYSIS_DETAILED: 0 records
+2026-11-12T16:24:40.699+08:00  INFO 9652 --- [edac-extraction] [pool-5-thread-2] [                                                 ] com.edac.extraction.RunCoordinator       : Starting AAAMAINDB.RET_ANALYSIS_GLOBAL attempt 1
+2026-11-12T16:24:59.740+08:00 ERROR 9652 --- [edac-extraction] [pool-5-thread-5] [                                                 ] com.edac.extraction.RunCoordinator       : Failed table INSTR_PRICE attempt 1
 
-Although Sakthi has already communicated the leadership responsibility, formal communication to the teams will help establish the necessary alignment and enable effective execution.
+java.sql.SQLException: ORA-01555: snapshot too old: rollback segment number 47 with name "_SYSSMU47_897101628$" too small
 
-Once this is in place, I can work closely with you and the respective technical leads to assess the current state, define the target operating model and establish a practical roadmap towards the December milestone.
+https://docs.oracle.com/error-help/db/ora-01555/
+        at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:715) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:615) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4C8Oall.processError(T4C8Oall.java:1372) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CTTIfun.receive(T4CTTIfun.java:969) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CTTIfun.doRPC(T4CTTIfun.java:237) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4C8Oall.doOALL(T4C8Oall.java:524) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CPreparedStatement.doOall8(T4CPreparedStatement.java:298) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.T4CPreparedStatement.fetch(T4CPreparedStatement.java:1770) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.OracleStatement.fetchMoreRows(OracleStatement.java:4383) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.fetchMoreRows(InsensitiveScrollableResultSet.java:951) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.fetchNextRows(InsensitiveScrollableResultSet.java:858) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.absoluteInternal(InsensitiveScrollableResultSet.java:830) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at oracle.jdbc.driver.InsensitiveScrollableResultSet.next(InsensitiveScrollableResultSet.java:529) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        at com.zaxxer.hikari.pool.HikariProxyResultSet.next(HikariProxyResultSet.java) ~[HikariCP-6.3.3.jar!/:na]
+        at com.edac.extraction.JdbcExtractor.extract(JdbcExtractor.java:39) ~[!/:na]
+        at com.edac.extraction.ChunkedExtractor.extractSingle(ChunkedExtractor.java:29) ~[!/:na]
+        at com.edac.extraction.ChunkedExtractor.extract(ChunkedExtractor.java:34) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.extractTable(RunCoordinator.java:224) ~[!/:na]
+        at com.edac.extraction.RunCoordinator.lambda$execute$3(RunCoordinator.java:171) ~[!/:na]
+        at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136) ~[na:na]
+        at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635) ~[na:na]
+        at java.base/java.lang.Thread.run(Thread.java:840) ~[na:na]
+Caused by: Error : 1555, Position : 0, SQL = SELECT
+  "INSTR_ID",
+  "CURRENCY_ID",
+  "TYPE_ID",
+  "THIRD_ID",
+  "TERM_TYPE_ID",
+  "MARKET_THIRD_ID",
+  "QUOTE_D",
+  "DAILY_DFLT_F",
+  "QUOTE_N",
+  "PRICE_N",
+  "PRICE_CALC_RULE_E",
+  "UNICITY_F",
+  "LAST_MODIF_D",
+  "LAST_USER_ID"
+FROM "AAAMAINDB"."INSTR_PRICE"
+, Original SQL = SELECT
+  "INSTR_ID",
+  "CURRENCY_ID",
+  "TYPE_ID",
+  "THIRD_ID",
+  "TERM_TYPE_ID",
+  "MARKET_THIRD_ID",
+  "QUOTE_D",
+  "DAILY_DFLT_F",
+  "QUOTE_N",
+  "PRICE_N",
+  "PRICE_CALC_RULE_E",
+  "UNICITY_F",
+  "LAST_MODIF_D",
+  "LAST_USER_ID"
+FROM "AAAMAINDB"."INSTR_PRICE"
+, Error Message = ORA-01555: snapshot too old: rollback segment number 47 with name "_SYSSMU47_897101628$" too small
 
-Regards,  
-Sarjoon
+        at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:723) ~[ojdbc11-23.7.0.25.01.jar!/:23.7.0.25.01]
+        ... 22 common frames omitted
